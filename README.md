@@ -99,12 +99,7 @@
    ```
 
 2. **配置环境变量**
-   在根目录创建 `.env` 文件，并填入以下内容：
-   ```env
-   GEMINI_API_KEY=你的_GEMINI_API_KEY
-   GOOGLE_GEMINI_BASE_URL=https://api.aicodewith.com/gemini_cli # 可选，代理地址
-   GEMINI_MODEL=gemini-3-pro-preview
-   ```
+   在根目录创建 `.env` 文件
 
 3. **配置 Firebase**
    确保 `src/lib/firebase-applet-config.json` 中包含正确的 Firebase 配置信息。
