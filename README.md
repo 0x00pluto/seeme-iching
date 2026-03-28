@@ -1,11 +1,238 @@
-<div align="center">
+# 镜微 · 易经 AI 内省
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+> **以卦为镜，观心自省。** 易经不预言命运，而是照见内心的模式。
 
-  <h1>Built with AI Studio</h2>
+镜微是一款基于易经六十四卦的 AI 心理内省应用。它的核心哲学只有一句话：**AI 永远不预言，只映照**。六十四卦不是算命工具，而是六十四种人类心理困境的原型——每一卦都是一面镜子，照见的是提问者自己的叙事模式。
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+---
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## 产品理念
 
-</div>
+传统易经占卜的问题在于，它把人的注意力引向「外部答案」，而不是「内部洞见」。镜微反其道而行之：AI 不给解读，不给建议，不预测吉凶。它只做一件事——用卦象的故事和意象，引出一个让你重新审视自己的问题。
+
+这套方法论来自心理学中的**叙事疗法**与**苏格拉底式提问**：人的困境往往不是因为缺乏答案，而是因为被困在某一个固定的叙事框架里。当你被问到「你说的『总是』，是每一次都这样吗？」的时候，你开始看见自己的叙事模式——这才是真正的改变起点。
+
+---
+
+## 核心功能
+
+### 占卦系统
+
+应用支持两种起卦方式：**时间起卦**（以当前时刻的时间数字推算卦象）和**随机起卦**（用加密随机数模拟铜钱投掷）。两种方式都会生成本卦、动爻和变卦，完整呈现易经「变」的哲学——任何处境都不是静止的，动爻所在之处，正是变化正在发生的地方。
+
+卦象以 SVG 六爻图形展示：阳爻为实线，阴爻为断线，动爻以琥珀色脉冲高亮标注。本卦与变卦并排展示，中间以箭头连接，直观呈现变化的方向。
+
+### AI 解读层
+
+每次起卦后，AI 会生成三个层次的内容：
+
+| 层次 | 内容 | 字数 |
+|---|---|---|
+| **卦象故事** | 以第二人称叙述的场景画面，不直接说「代表什么」，而是描绘意象 | 200–300 字 |
+| **动爻详解** | 每条动爻的白话解读，描述处境与象征，引出变化的方向 | 100–150 字/条 |
+| **水墨意境图** | 根据卦象五行属性（水/火/木/金/土）生成的 AI 水墨风格图片 | — |
+
+同时，AI 还会生成 **3 个免费引导问题**，这些问题与用户的提问直接相关，并包含变卦的预告——让用户在决定是否深入之前，先感受到卦象与自己处境的共鸣。
+
+### 三阶段对话系统（付费解锁）
+
+付费后进入完整的 AI 对话，对话分三个阶段递进：
+
+**映照阶段** — AI 用卦象故事引出第一个问题，帮助用户看见自己的叙事框架。AI 在这个阶段只问问题，不给答案，不做评价。
+
+**深挖阶段** — 当用户开始展开叙述后，AI 会追问细节，挑战「总是/从来/每次」等绝对化表述，帮助用户看见叙事中的例外和盲点。
+
+**悬置阶段** — 当 AI 检测到放弃信号（回答变短、出现放弃词、对话超过 8 轮）时，主动进入悬置，生成对话摘要存入认知档案，引导用户写下此刻的感受，而不是追求「解决问题」。
+
+### 认知档案与日历
+
+每次对话结束后，系统会自动分析并记录：情绪极性（-1.0 到 1.0）、主题标签（工作/关系/自我/意义/身体）、对话摘要。这些数据在认知日历页（`/journal`）以月历格子展示，情绪颜色编码让用户一眼看见自己的情绪变化轨迹。
+
+### 分享系统
+
+每条卦局可生成唯一的分享链接（`/share/:token`），分享页展示卦象、水墨图和 AI 生成的洞见摘要，无需登录即可查看。
+
+---
+
+## 变现模式
+
+镜微采用**追问付费**模式：起卦、卦象故事、动爻详解、3 个引导问题全部免费；付费 **¥9.9/次** 解锁完整三阶段 AI 对话和变卦深度解读。
+
+支付通道使用**虎皮椒聚合支付**，同时支持支付宝和微信支付，适合个人开发者无需营业执照直接接入。
+
+---
+
+## 技术架构
+
+### 技术栈
+
+| 层次 | 技术 |
+|---|---|
+| 前端框架 | React 19 + TypeScript + Vite 7 |
+| 样式系统 | Tailwind CSS 4 + shadcn/ui + Framer Motion |
+| 字体 | Noto Serif SC + EB Garamond（Google Fonts） |
+| 后端框架 | Express 4 + tRPC 11 |
+| 数据库 | MySQL（Drizzle ORM） |
+| AI 集成 | Manus Built-in LLM（结构化 JSON 响应） |
+| 图片生成 | Manus Built-in Image Generation |
+| 文件存储 | S3（水墨图片） |
+| 认证 | Manus OAuth |
+| 支付 | 虎皮椒聚合支付（支付宝 + 微信） |
+
+### 项目结构
+
+```
+jingwei-iching/
+├── client/
+│   └── src/
+│       ├── components/
+│       │   ├── HexagramDisplay.tsx   # SVG 六爻卦象可视化
+│       │   ├── CastingAnimation.tsx  # 起卦全屏动画
+│       │   ├── OracleChat.tsx        # 三阶段 AI 对话组件
+│       │   ├── PaywallGate.tsx       # 付费墙（3问引导 + 支付弹窗）
+│       │   └── ShareCard.tsx         # 分享卡片
+│       └── pages/
+│           ├── Home.tsx              # 主页（占卦流程状态机）
+│           ├── SharedReading.tsx     # 公开分享页
+│           ├── HistoryPage.tsx       # 历史记录
+│           ├── ReadingDetail.tsx     # 卦局详情
+│           └── JournalPage.tsx       # 认知日历
+├── server/
+│   └── routers/
+│       ├── oracle.ts                 # 占卦/解读/对话/分享路由
+│       └── payment.ts                # 虎皮椒支付路由
+├── shared/
+│   └── hexagrams.ts                  # 64 卦完整数据层 + 起卦算法
+└── drizzle/
+    └── schema.ts                     # 数据库表定义
+```
+
+### 数据库设计
+
+应用使用四张核心表：
+
+**`readings`** — 每次占卦的完整记录，包含本卦编号、动爻、变卦编号、用户问题、AI 解读、水墨图 URL、对话阶段、情绪分数、主题标签、分享 token 和付费状态。
+
+**`messages`** — 每条对话消息，关联到 `readings`，记录角色（user/assistant）和内容。
+
+**`orders`** — 每笔支付订单，记录商户订单号、金额、支付方式（支付宝/微信）、虎皮椒二维码 URL 和支付状态。
+
+**`users`** — Manus OAuth 用户，支持登录状态下的历史记录关联。
+
+### 64 卦数据层
+
+`shared/hexagrams.ts` 是应用的数据核心，包含完整的 64 卦数据结构：
+
+```typescript
+interface Hexagram {
+  number: number;          // 卦序（1-64）
+  name: string;            // 卦名（中文）
+  romanized: string;       // 拼音
+  symbol: string;          // 卦象符号
+  lines: boolean[];        // 六爻（true=阳，false=阴），index 0-2 为下卦从上到下，3-5 为上卦从上到下
+  judgment: string;        // 卦辞（原文）
+  image: string;           // 象辞（原文）
+  yao: string[];           // 六爻爻辞（index 0 = 初爻）
+  element: string;         // 五行属性
+  keywords: string[];      // 关键词
+  psyche_core: string;     // 心理困境核心
+  shadow: string;          // 阴影面
+  share_insight: string;   // 分享卡片引言
+  color_theme: string;     // 分享卡片配色
+}
+```
+
+**关键爻序映射**（变卦计算的核心，容易出错）：
+
+```typescript
+// lineNum（1=初爻，6=上爻）→ lines 数组索引
+const lineIndexMap = { 1: 2, 2: 1, 3: 0, 4: 5, 5: 4, 6: 3 };
+```
+
+---
+
+## 本地开发
+
+### 环境要求
+
+- Node.js 22+
+- pnpm 10+
+- MySQL 数据库
+
+### 快速启动
+
+```bash
+# 克隆项目
+git clone <repo-url>
+cd jingwei-iching
+
+# 安装依赖
+pnpm install
+
+# 配置环境变量（参考下方说明）
+cp .env.example .env
+
+# 推送数据库迁移
+pnpm db:push
+
+# 启动开发服务器
+pnpm dev
+```
+
+开发服务器启动后，访问 `http://localhost:3000`。
+
+### 环境变量
+
+| 变量名 | 说明 | 必填 |
+|---|---|---|
+| `DATABASE_URL` | MySQL 连接字符串 | ✅ |
+| `JWT_SECRET` | Session Cookie 签名密钥 | ✅ |
+| `BUILT_IN_FORGE_API_KEY` | Manus LLM + 图片生成 API Key | ✅ |
+| `BUILT_IN_FORGE_API_URL` | Manus API Base URL | ✅ |
+| `XUNHU_APPID` | 虎皮椒支付 AppID | 支付功能必填 |
+| `XUNHU_SECRET` | 虎皮椒支付密钥 | 支付功能必填 |
+| `VITE_APP_ID` | Manus OAuth 应用 ID | ✅ |
+| `OAUTH_SERVER_URL` | Manus OAuth 后端地址 | ✅ |
+
+### 支付配置
+
+1. 前往 [虎皮椒官网](https://www.xunhupay.com) 注册个人开发者账号
+2. 在「应用管理」中创建应用，获取 AppID 和密钥
+3. 在「回调设置」中填写：`https://你的域名/api/payment/notify`
+4. 将 `XUNHU_APPID` 和 `XUNHU_SECRET` 填入环境变量
+
+---
+
+## 测试
+
+```bash
+# 运行全部测试
+pnpm test
+
+# 关键测试覆盖
+# - 64 卦数据完整性（64 条、编号 1-64 无缺、每卦 6 爻、lines 唯一）
+# - 变卦计算正确性（乾卦初爻动→姤卦44，上爻动→夬卦43）
+# - 起卦算法（castByTime / castRandom 返回有效范围）
+# - 支付路由（订单创建、签名验证、状态查询）
+# - 对话阶段检测（放弃信号→hold，>8轮→hold）
+```
+
+---
+
+## 部署
+
+本项目托管于 Manus 平台，支持一键发布。在 Manus 管理界面点击「Publish」按钮即可部署到生产环境，自动分配 `.manus.space` 域名，也支持绑定自定义域名。
+
+---
+
+## 方法论来源
+
+本产品的 AI 对话设计基于叙事疗法的核心原则：**人不是问题，问题才是问题**。AI 的角色不是治疗师，也不是算命师，而是一面镜子——它用卦象的语言，帮助你看见自己正在讲述的故事，以及这个故事里你还没有看见的部分。
+
+三阶段对话结构（映照→深挖→悬置）的设计灵感来自苏格拉底式提问法：不给答案，只问问题；不评判对错，只扩展视角；不追求解决，只创造空间。
+
+---
+
+## License
+
+MIT © 镜微团队

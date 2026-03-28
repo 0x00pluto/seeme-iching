@@ -1,0 +1,5 @@
+{
+  "name": "Remix: 镜微 · 易经 AI 内省",
+  "description": "一款结合易经 64 卦与 AI 心理解读的内省 Web 应用，支持匿名占卦、AI 解读、内省指引。",
+  "requestFramePermissions": []
+}
