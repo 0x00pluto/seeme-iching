@@ -14,222 +14,123 @@
 
 ---
 
-## 核心功能
+## 核心功能 (实际开发特性)
 
-### 占卦系统
+### 1. 沉浸式占卦系统
+应用支持两种起卦方式：
+- **时间起卦**：以当前时刻的宇宙时间切片推算卦象。
+- **铜钱起卦**：模拟传统的掷筊过程，通过随机算法生成六爻。
+卦象以 SVG 六爻图形优雅展示，结合 Framer Motion 提供流畅的视觉反馈。
 
-应用支持两种起卦方式：**时间起卦**（以当前时刻的时间数字推算卦象）和**随机起卦**（用加密随机数模拟铜钱投掷）。两种方式都会生成本卦、动爻和变卦，完整呈现易经「变」的哲学——任何处境都不是静止的，动爻所在之处，正是变化正在发生的地方。
+### 2. 四镜解读 (AI 观心报告)
+每次起卦后，系统会推演出四面“镜子”，并由 AI 结合用户的问题生成深度内省报告：
+- **现状之镜 (本卦)**：代表当前事态的外部表现与现状。
+- **内心之镜 (互卦)**：代表事态内部隐藏的动机、用户的真实内心状态。
+- **阴影之镜 (错卦)**：代表被忽视的对立面、潜意识中的恐惧或盲点。
+- **视角之镜 (综卦)**：代表换位思考后的客观环境或事态的另一面。
 
-卦象以 SVG 六爻图形展示：阳爻为实线，阴爻为断线，动爻以琥珀色脉冲高亮标注。本卦与变卦并排展示，中间以箭头连接，直观呈现变化的方向。
+### 3. 深度对话系统 (Deep Dialogue)
+提供一个限定 **8 轮** 的深度对话空间。AI 化身心理引导者：
+- **映照与深挖**：用卦象故事引出问题，帮助用户看见自己的叙事框架，挑战绝对化表述。
+- **克制与悬置**：AI 只问问题，不给答案，不做评价。在第 8 轮时进行总结并给出充满希望的结语，引导用户自我觉察。
 
-### AI 解读层
-
-每次起卦后，AI 会生成三个层次的内容：
-
-| 层次 | 内容 | 字数 |
-|---|---|---|
-| **卦象故事** | 以第二人称叙述的场景画面，不直接说「代表什么」，而是描绘意象 | 200–300 字 |
-| **动爻详解** | 每条动爻的白话解读，描述处境与象征，引出变化的方向 | 100–150 字/条 |
-| **水墨意境图** | 根据卦象五行属性（水/火/木/金/土）生成的 AI 水墨风格图片 | — |
-
-同时，AI 还会生成 **3 个免费引导问题**，这些问题与用户的提问直接相关，并包含变卦的预告——让用户在决定是否深入之前，先感受到卦象与自己处境的共鸣。
-
-### 三阶段对话系统（付费解锁）
-
-付费后进入完整的 AI 对话，对话分三个阶段递进：
-
-**映照阶段** — AI 用卦象故事引出第一个问题，帮助用户看见自己的叙事框架。AI 在这个阶段只问问题，不给答案，不做评价。
-
-**深挖阶段** — 当用户开始展开叙述后，AI 会追问细节，挑战「总是/从来/每次」等绝对化表述，帮助用户看见叙事中的例外和盲点。
-
-**悬置阶段** — 当 AI 检测到放弃信号（回答变短、出现放弃词、对话超过 8 轮）时，主动进入悬置，生成对话摘要存入认知档案，引导用户写下此刻的感受，而不是追求「解决问题」。
-
-### 认知档案与日历
-
-每次对话结束后，系统会自动分析并记录：情绪极性（-1.0 到 1.0）、主题标签（工作/关系/自我/意义/身体）、对话摘要。这些数据在认知日历页（`/journal`）以月历格子展示，情绪颜色编码让用户一眼看见自己的情绪变化轨迹。
-
-### 分享系统
-
-每条卦局可生成唯一的分享链接（`/share/:token`），分享页展示卦象、水墨图和 AI 生成的洞见摘要，无需登录即可查看。
-
----
-
-## 变现模式
-
-镜微采用**追问付费**模式：起卦、卦象故事、动爻详解、3 个引导问题全部免费；付费 **¥9.9/次** 解锁完整三阶段 AI 对话和变卦深度解读。
-
-支付通道使用**虎皮椒聚合支付**，同时支持支付宝和微信支付，适合个人开发者无需营业执照直接接入。
+### 4. 认知档案 (云端同步)
+- 基于 Firebase 构建的用户系统与云端数据库。
+- 用户的每一次占卜记录、自我觉察笔记以及深度对话历史，都会被安全地保存在云端，随时可以回顾。
 
 ---
 
 ## 技术架构
 
+本项目采用 **全栈 (Full-Stack)** 架构，确保了极佳的用户体验与最高级别的 API 密钥安全。
+
 ### 技术栈
 
-| 层次 | 技术 |
+| 模块 | 技术选型 |
 |---|---|
-| 前端框架 | React 19 + TypeScript + Vite 7 |
-| 样式系统 | Tailwind CSS 4 + shadcn/ui + Framer Motion |
-| 字体 | Noto Serif SC + EB Garamond（Google Fonts） |
-| 后端框架 | Express 4 + tRPC 11 |
-| 数据库 | MySQL（Drizzle ORM） |
-| AI 集成 | Manus Built-in LLM（结构化 JSON 响应） |
-| 图片生成 | Manus Built-in Image Generation |
-| 文件存储 | S3（水墨图片） |
-| 认证 | Manus OAuth |
-| 支付 | 虎皮椒聚合支付（支付宝 + 微信） |
+| **前端框架** | React 18 + TypeScript + Vite |
+| **样式系统** | Tailwind CSS + Framer Motion |
+| **UI 组件** | Lucide React (图标) + React Markdown |
+| **后端服务** | Node.js + Express (集成在 Vite 中间件) |
+| **数据库与认证** | Firebase (Firestore + Google Auth) |
+| **AI 大模型** | Google Gemini API (`gemini-3-pro-preview`) |
 
-### 项目结构
+### 核心项目结构
 
-```
-jingwei-iching/
-├── client/
-│   └── src/
-│       ├── components/
-│       │   ├── HexagramDisplay.tsx   # SVG 六爻卦象可视化
-│       │   ├── CastingAnimation.tsx  # 起卦全屏动画
-│       │   ├── OracleChat.tsx        # 三阶段 AI 对话组件
-│       │   ├── PaywallGate.tsx       # 付费墙（3问引导 + 支付弹窗）
-│       │   └── ShareCard.tsx         # 分享卡片
-│       └── pages/
-│           ├── Home.tsx              # 主页（占卦流程状态机）
-│           ├── SharedReading.tsx     # 公开分享页
-│           ├── HistoryPage.tsx       # 历史记录
-│           ├── ReadingDetail.tsx     # 卦局详情
-│           └── JournalPage.tsx       # 认知日历
-├── server/
-│   └── routers/
-│       ├── oracle.ts                 # 占卦/解读/对话/分享路由
-│       └── payment.ts                # 虎皮椒支付路由
-├── shared/
-│   └── hexagrams.ts                  # 64 卦完整数据层 + 起卦算法
-└── drizzle/
-    └── schema.ts                     # 数据库表定义
+```text
+/
+├── server.ts                 # Express 后端入口 (处理 AI 请求，保护 API Key)
+├── src/
+│   ├── components/
+│   │   ├── IChing/           # 易经核心业务组件
+│   │   │   ├── Casting.tsx        # 起卦交互组件
+│   │   │   ├── Hexagram.tsx       # SVG 卦象渲染
+│   │   │   ├── Interpretation.tsx # 四面镜子与 AI 观心报告
+│   │   │   └── DeepDialogue.tsx   # 8轮深度对话系统
+│   │   ├── Auth/             # Firebase 登录组件
+│   │   └── Layout/           # 页面布局组件
+│   ├── lib/
+│   │   ├── iching.ts         # 64卦完整数据字典与起卦/变卦算法
+│   │   ├── firebase.ts       # Firebase 初始化与安全封装
+│   │   └── utils.ts          # 工具函数 (Tailwind cn 等)
+│   └── App.tsx               # 路由与状态分发
+├── .env                      # 环境变量 (后端读取)
+└── package.json              # 依赖与脚本
 ```
 
-### 数据库设计
-
-应用使用四张核心表：
-
-**`readings`** — 每次占卦的完整记录，包含本卦编号、动爻、变卦编号、用户问题、AI 解读、水墨图 URL、对话阶段、情绪分数、主题标签、分享 token 和付费状态。
-
-**`messages`** — 每条对话消息，关联到 `readings`，记录角色（user/assistant）和内容。
-
-**`orders`** — 每笔支付订单，记录商户订单号、金额、支付方式（支付宝/微信）、虎皮椒二维码 URL 和支付状态。
-
-**`users`** — Manus OAuth 用户，支持登录状态下的历史记录关联。
-
-### 64 卦数据层
-
-`shared/hexagrams.ts` 是应用的数据核心，包含完整的 64 卦数据结构：
-
-```typescript
-interface Hexagram {
-  number: number;          // 卦序（1-64）
-  name: string;            // 卦名（中文）
-  romanized: string;       // 拼音
-  symbol: string;          // 卦象符号
-  lines: boolean[];        // 六爻（true=阳，false=阴），index 0-2 为下卦从上到下，3-5 为上卦从上到下
-  judgment: string;        // 卦辞（原文）
-  image: string;           // 象辞（原文）
-  yao: string[];           // 六爻爻辞（index 0 = 初爻）
-  element: string;         // 五行属性
-  keywords: string[];      // 关键词
-  psyche_core: string;     // 心理困境核心
-  shadow: string;          // 阴影面
-  share_insight: string;   // 分享卡片引言
-  color_theme: string;     // 分享卡片配色
-}
-```
-
-**关键爻序映射**（变卦计算的核心，容易出错）：
-
-```typescript
-// lineNum（1=初爻，6=上爻）→ lines 数组索引
-const lineIndexMap = { 1: 2, 2: 1, 3: 0, 4: 5, 5: 4, 6: 3 };
-```
+### 安全设计
+- **Firestore 安全规则**：配置了严格的 Firebase Security Rules，确保用户只能读写自己的占卜记录和对话历史。
 
 ---
 
-## 本地开发
+## 本地开发指南
 
 ### 环境要求
-
-- Node.js 22+
-- pnpm 10+
-- MySQL 数据库
+- Node.js 18+
+- npm 或 pnpm
+- Firebase 项目 (需开启 Firestore 和 Google Auth)
+- Google Gemini API Key
 
 ### 快速启动
 
-```bash
-# 克隆项目
-git clone <repo-url>
-cd jingwei-iching
+1. **克隆项目并安装依赖**
+   ```bash
+   npm install
+   ```
 
-# 安装依赖
-pnpm install
+2. **配置环境变量**
+   在根目录创建 `.env` 文件，并填入以下内容：
+   ```env
+   GEMINI_API_KEY=你的_GEMINI_API_KEY
+   GOOGLE_GEMINI_BASE_URL=https://api.aicodewith.com/gemini_cli # 可选，代理地址
+   GEMINI_MODEL=gemini-3-pro-preview
+   ```
 
-# 配置环境变量（参考下方说明）
-cp .env.example .env
+3. **配置 Firebase**
+   确保 `src/lib/firebase-applet-config.json` 中包含正确的 Firebase 配置信息。
 
-# 推送数据库迁移
-pnpm db:push
+4. **启动全栈开发服务器**
+   ```bash
+   npm run dev
+   ```
+   *此命令会同时启动 Express 后端 API 和 Vite 前端热更新服务。*
 
-# 启动开发服务器
-pnpm dev
-```
-
-开发服务器启动后，访问 `http://localhost:3000`。
-
-### 环境变量
-
-| 变量名 | 说明 | 必填 |
-|---|---|---|
-| `DATABASE_URL` | MySQL 连接字符串 | ✅ |
-| `JWT_SECRET` | Session Cookie 签名密钥 | ✅ |
-| `BUILT_IN_FORGE_API_KEY` | Manus LLM + 图片生成 API Key | ✅ |
-| `BUILT_IN_FORGE_API_URL` | Manus API Base URL | ✅ |
-| `XUNHU_APPID` | 虎皮椒支付 AppID | 支付功能必填 |
-| `XUNHU_SECRET` | 虎皮椒支付密钥 | 支付功能必填 |
-| `VITE_APP_ID` | Manus OAuth 应用 ID | ✅ |
-| `OAUTH_SERVER_URL` | Manus OAuth 后端地址 | ✅ |
-
-### 支付配置
-
-1. 前往 [虎皮椒官网](https://www.xunhupay.com) 注册个人开发者账号
-2. 在「应用管理」中创建应用，获取 AppID 和密钥
-3. 在「回调设置」中填写：`https://你的域名/api/payment/notify`
-4. 将 `XUNHU_APPID` 和 `XUNHU_SECRET` 填入环境变量
+5. **访问应用**
+   打开浏览器访问 `http://localhost:3000`。
 
 ---
 
-## 测试
+## 生产部署
+
+项目已配置为标准的 Node.js 全栈应用构建流程：
 
 ```bash
-# 运行全部测试
-pnpm test
+# 1. 构建前端静态文件
+npm run build
 
-# 关键测试覆盖
-# - 64 卦数据完整性（64 条、编号 1-64 无缺、每卦 6 爻、lines 唯一）
-# - 变卦计算正确性（乾卦初爻动→姤卦44，上爻动→夬卦43）
-# - 起卦算法（castByTime / castRandom 返回有效范围）
-# - 支付路由（订单创建、签名验证、状态查询）
-# - 对话阶段检测（放弃信号→hold，>8轮→hold）
+# 2. 启动生产服务器 (Node.js Express 将接管 API 并提供静态文件服务)
+npm run start
 ```
-
----
-
-## 部署
-
-本项目托管于 Manus 平台，支持一键发布。在 Manus 管理界面点击「Publish」按钮即可部署到生产环境，自动分配 `.manus.space` 域名，也支持绑定自定义域名。
-
----
-
-## 方法论来源
-
-本产品的 AI 对话设计基于叙事疗法的核心原则：**人不是问题，问题才是问题**。AI 的角色不是治疗师，也不是算命师，而是一面镜子——它用卦象的语言，帮助你看见自己正在讲述的故事，以及这个故事里你还没有看见的部分。
-
-三阶段对话结构（映照→深挖→悬置）的设计灵感来自苏格拉底式提问法：不给答案，只问问题；不评判对错，只扩展视角；不追求解决，只创造空间。
 
 ---
 
