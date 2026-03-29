@@ -14,7 +14,7 @@
 | 样式 | Tailwind CSS 4（`@tailwindcss/vite`）、`src/index.css` 中 `@theme` 与字体 |
 | 动效 / UI | Framer Motion、Lucide React、Sonner（Toast）、React Markdown、Recharts（若使用图表） |
 | 服务端 | Node.js，`server.ts` 内 **Express** + 开发态 **Vite middleware**（同源 3000 端口） |
-| AI | `@google/genai`，默认模型 `gemini-3-pro-preview`（可由环境变量覆盖） |
+| AI | `openai` SDK 指向火山方舟 **Coding Plan** OpenAI 兼容端（默认 `.../api/coding/v3` + `ark-code-latest`）；常规在线推理可改 `ARK_BASE_URL=.../api/v3` 且 `ARK_MODEL=ep-...`） |
 | 数据与登录 | Firebase（`firebase-applet-config.json` 于仓库根目录） |
 
 说明：依赖里包含 `wouter`，当前源码未使用；路由由 `Home` 内状态机（`landing` / `divination` / `interpretation` / `history`）驱动。
@@ -60,9 +60,9 @@
 
 | 变量 | 用途 |
 |------|------|
-| `GEMINI_API_KEY` | 服务端调用 Gemini **必需** |
-| `GOOGLE_GEMINI_BASE_URL` | 可选；默认 `https://api.aicodewith.com/gemini_cli` |
-| `GEMINI_MODEL` | 可选；默认 `gemini-3-pro-preview` |
+| `ARK_API_KEY` | 服务端调用方舟 **必需**（控制台 API Key） |
+| `ARK_BASE_URL` | 可选；默认 **Coding Plan** `https://ark.cn-beijing.volces.com/api/coding/v3`；勿与通用 `/api/v3` 混用以免额外计费（见官方 [Coding 快速开始](https://www.volcengine.com/docs/82379/1928261)） |
+| `ARK_MODEL` | 可选；默认 `ark-code-latest`；常规推理接入点则填 `ep-` 开头并配合 `.../api/v3` |
 | `APP_URL` | Vite 注入 `process.env.APP_URL`（如分享链接）；未设时前端可用 `window.location.origin` |
 | `NODE_ENV` | `production` 时 `server.ts` 走静态 `dist`，否则走 Vite 中间件 |
 | `DISABLE_HMR` | 设为 `true` 时关闭 HMR（注释说明用于 AI Studio 等场景避免频繁刷新） |
@@ -78,7 +78,7 @@
 
 ## 给 AI 助手的实现提示
 
-1. **改 AI 行为**：优先改 `server.ts` 内 prompt 与 `systemInstruction`，与产品「只问不判、心理觉察」一致。
+1. **改 AI 行为**：改 `server.ts` 内 prompt 与 `systemInstruction`（方舟 OpenAI 兼容 API），与产品「只问不判、心理觉察」一致。
 2. **改卦象与算法**：集中在 `src/lib/iching.ts`。
 3. **改 UI 流程**：`src/pages/Home.tsx` 与各 `src/components/IChing/*` 组件。
 4. **Firebase**：配置在根目录 `firebase-applet-config.json`；Firestore 集合如 `history` 与 `uid` 字段见 `Home.tsx` 查询逻辑。

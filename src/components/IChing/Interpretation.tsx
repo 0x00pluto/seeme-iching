@@ -50,15 +50,27 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
           }),
         });
 
+        const data = await response.json().catch(() => ({} as { error?: string; detail?: string; text?: string }));
         if (!response.ok) {
-          throw new Error("API request failed");
+          const base =
+            typeof data.error === "string" && data.error
+              ? data.error
+              : "API request failed";
+          const detail =
+            typeof data.detail === "string" && data.detail.trim()
+              ? data.detail.trim()
+              : "";
+          throw new Error(detail ? `${base}\n\n${detail}` : base);
         }
 
-        const data = await response.json();
         setInterpretation(data.text || "未能生成解读，请稍后再试。");
       } catch (err) {
         console.error("API Error:", err);
-        setError("AI 解读生成失败，请检查网络或 API 配置。");
+        const hint =
+          err instanceof Error && err.message !== "API request failed"
+            ? err.message
+            : "AI 解读生成失败，请检查网络或 API 配置。";
+        setError(hint);
       } finally {
         setIsLoading(false);
       }
@@ -145,7 +157,9 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
               <div className="text-xl text-ink/30 font-serif italic animate-pulse tracking-widest">正在取象、观心、通变...</div>
             </div>
           ) : error ? (
-            <div className="text-center py-16 text-accent/60 font-serif italic">{error}</div>
+            <div className="text-center py-16 text-accent/60 font-serif italic whitespace-pre-wrap text-sm max-w-xl mx-auto px-4">
+              {error}
+            </div>
           ) : (
             <div className="prose prose-ink max-w-none font-serif text-xl leading-relaxed text-ink/70">
               <ReactMarkdown>{interpretation}</ReactMarkdown>

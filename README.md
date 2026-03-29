@@ -53,7 +53,7 @@
 | **UI 组件** | Lucide React (图标) + React Markdown |
 | **后端服务** | Node.js + Express (集成在 Vite 中间件) |
 | **数据库与认证** | Firebase (Firestore + Google Auth) |
-| **AI 大模型** | Google Gemini API (`gemini-3-pro-preview`) |
+| **AI 大模型** | 火山方舟 **Coding Plan**（OpenAI 兼容，默认 `api/coding/v3` + `ark-code-latest`；见 `.env.example`） |
 
 ### 核心项目结构
 
@@ -89,7 +89,7 @@
 - Node.js 18+
 - [pnpm](https://pnpm.io/)（推荐；亦可用 npm，但仓库以 `pnpm-lock.yaml` 为准）
 - Firebase 项目 (需开启 Firestore 和 Google Auth)
-- Google Gemini API Key
+- 火山方舟 Coding Plan API Key（`ARK_API_KEY`，可选覆盖 `ARK_BASE_URL` / `ARK_MODEL`，见 `.env.example`）
 
 ### 快速启动
 

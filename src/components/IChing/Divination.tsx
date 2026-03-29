@@ -132,6 +132,7 @@ export const Divination: React.FC<DivinationProps> = ({ onComplete }) => {
               stroke="currentColor"
               strokeWidth="1"
               strokeDasharray="100 100"
+              initial={{ strokeDashoffset: 100 }}
               animate={{ strokeDashoffset: 100 - progress }}
               className="text-accent"
             />

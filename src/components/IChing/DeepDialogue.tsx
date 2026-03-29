@@ -95,11 +95,18 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
           }),
         });
 
+        const data = await response.json().catch(() => ({} as { error?: string; detail?: string; text?: string }));
         if (!response.ok) {
-          throw new Error("API request failed");
+          const base =
+            typeof data.error === "string" && data.error
+              ? data.error
+              : "API request failed";
+          const detail =
+            typeof data.detail === "string" && data.detail.trim()
+              ? data.detail.trim()
+              : "";
+          throw new Error(detail ? `${base}\n\n${detail}` : base);
         }
-
-        const data = await response.json();
 
         const assistantMsg: Message = { 
           role: "assistant", 
@@ -113,7 +120,12 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
         saveSession(finalMessages, round + 1);
       } catch (error) {
         console.error("API Error:", error);
-        setMessages(prev => [...prev, { role: "assistant", content: "抱歉，由于意念波动（网络错误），我暂时无法回应。请稍后再试。", timestamp: Date.now() }]);
+        const fallback = "抱歉，由于意念波动（网络错误），我暂时无法回应。请稍后再试。";
+        const content =
+          error instanceof Error && error.message !== "API request failed"
+            ? error.message
+            : fallback;
+        setMessages(prev => [...prev, { role: "assistant", content, timestamp: Date.now() }]);
       } finally {
       setIsLoading(false);
     }

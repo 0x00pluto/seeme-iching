@@ -1,37 +1,88 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 import dotenv from "dotenv";
 
-// Load environment variables from .env file
 dotenv.config();
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+/**
+ * 默认使用火山方舟 Coding Plan 的 OpenAI 兼容端（勿与通用 /api/v3 混用，见控制台说明）。
+ * https://www.volcengine.com/docs/82379/1928261
+ */
+const ARK_BASE_URL_DEFAULT = "https://ark.cn-beijing.volces.com/api/coding/v3";
 
-  app.use(express.json());
+/** Coding 快速配置中的模型标识；常规在线推理可改为 ep- 接入点 */
+const ARK_MODEL_DEFAULT = "ark-code-latest";
 
-  // API Routes
-  app.post("/api/interpret", async (req, res) => {
-    try {
-      const { question, benGua, huGua, cuoGua, zongGua } = req.body;
-      
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ error: "API key not configured on server" });
-      }
+const ERR_NO_ARK_KEY =
+  "服务端未配置 ARK_API_KEY。请在火山方舟控制台创建 API Key 并写入 .env：https://www.volcengine.com/docs/82379/1541594";
 
-      const ai = new GoogleGenAI({ 
-        apiKey,
-        httpOptions: {
-          baseUrl: process.env.GOOGLE_GEMINI_BASE_URL || "https://api.aicodewith.com/gemini_cli"
-        }
-      });
-      const modelId = process.env.GEMINI_MODEL || "gemini-3-pro-preview";
+/** 将 OpenAI SDK / 方舟 抛出的错误转为对用户友好的中文 `error`，并保留 `detail` 原文 */
+function formatArkFailure(error: unknown): { error: string; detail: string } {
+  const detail = error instanceof Error ? error.message : String(error);
+  const lower = detail.toLowerCase();
 
-      const prompt = `
+  if (
+    lower.includes("401") ||
+    lower.includes("unauthorized") ||
+    lower.includes("invalid api key") ||
+    lower.includes("invalid_api_key")
+  ) {
+    return {
+      error: "API Key 无效或未授权。请检查 .env 中的 ARK_API_KEY 是否与火山方舟控制台一致。",
+      detail,
+    };
+  }
+
+  if (
+    lower.includes("endpoint") ||
+    lower.includes("not found") ||
+    lower.includes("invalid model") ||
+    lower.includes("does not exist")
+  ) {
+    return {
+      error:
+        "模型不可用。Coding Plan 默认使用 ARK_MODEL=ark-code-latest；若使用常规在线推理，请将 ARK_BASE_URL 设为 .../api/v3 且 ARK_MODEL 为接入点 ID（ep- 开头）。",
+      detail,
+    };
+  }
+
+  if (
+    lower.includes("insufficient") ||
+    lower.includes("balance") ||
+    lower.includes("quota") ||
+    lower.includes("余额") ||
+    lower.includes("欠费")
+  ) {
+    return {
+      error: "账户余额或调用额度不足，请前往火山引擎控制台检查计费与配额。",
+      detail,
+    };
+  }
+
+  return {
+    error:
+      "AI 调用失败，请检查网络、ARK_API_KEY、ARK_BASE_URL（Coding 用 .../api/coding/v3）与 ARK_MODEL（默认 ark-code-latest 或 ep- 接入点）。",
+    detail,
+  };
+}
+
+function getArkClient() {
+  const apiKey = process.env.ARK_API_KEY?.trim();
+  if (!apiKey) return null;
+  return new OpenAI({
+    apiKey,
+    baseURL: process.env.ARK_BASE_URL?.trim() || ARK_BASE_URL_DEFAULT,
+  });
+}
+
+function getArkModelId(): string {
+  return process.env.ARK_MODEL?.trim() || ARK_MODEL_DEFAULT;
+}
+
+function buildInterpretUserPrompt(question: unknown, benGua: any, huGua: any, cuoGua: any, zongGua: any) {
+  return `
         你是一位精通易经哲学与深度心理学的引导者。
         
         用户的问题/意念: "${question || "未提供具体问题，请进行一般性指引"}"
@@ -51,40 +102,10 @@ async function startServer() {
         
         请使用优雅、克制、富有启发性的中文。
       `;
+}
 
-      const response = await ai.models.generateContent({
-        model: modelId,
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }]
-        }
-      });
-
-      res.json({ text: response.text });
-    } catch (error) {
-      console.error("Interpret API Error:", error);
-      res.status(500).json({ error: "AI 解读生成失败，请检查网络或 API 配置。" });
-    }
-  });
-
-  app.post("/api/chat", async (req, res) => {
-    try {
-      const { messages, question, interpretation, round, input } = req.body;
-      
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ error: "API key not configured on server" });
-      }
-
-      const ai = new GoogleGenAI({ 
-        apiKey,
-        httpOptions: {
-          baseUrl: process.env.GOOGLE_GEMINI_BASE_URL || "https://api.aicodewith.com/gemini_cli"
-        }
-      });
-      const modelId = process.env.GEMINI_MODEL || "gemini-3-pro-preview";
-
-      const systemInstruction = `你是一位深度心理咨询师与易经哲学引导者。
+function buildChatSystemInstruction(question: unknown, interpretation: unknown, round: unknown) {
+  return `你是一位深度心理咨询师与易经哲学引导者。
       
       当前对话背景：
       - 用户的问题: "${question}"
@@ -102,28 +123,71 @@ async function startServer() {
       - 严禁算命或玄学说教，侧重心理觉察。
       - 如果是最后一轮（第8轮），请进行总结并给出一个充满希望的结语。
       - 保持对话的连贯性，基于用户的回答进行追问。`;
+}
 
-      const chat = ai.chats.create({
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
+
+  app.use(express.json());
+
+  app.post("/api/interpret", async (req, res) => {
+    try {
+      const { question, benGua, huGua, cuoGua, zongGua } = req.body;
+      const client = getArkClient();
+      if (!client) {
+        return res.status(500).json({ error: ERR_NO_ARK_KEY });
+      }
+      const modelId = getArkModelId();
+      const userContent = buildInterpretUserPrompt(question, benGua, huGua, cuoGua, zongGua);
+      const completion = (await client.chat.completions.create({
         model: modelId,
-        config: {
-          systemInstruction,
-          tools: [{ googleSearch: {} }]
-        },
-        history: messages.map((m: any) => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }]
-        }))
-      });
-
-      const response = await chat.sendMessage({ message: input });
-      res.json({ text: response.text });
+        messages: [{ role: "user", content: userContent }],
+        stream: false,
+      })) as OpenAI.Chat.ChatCompletion;
+      const text = completion.choices[0]?.message?.content ?? "";
+      return res.json({ text });
     } catch (error) {
-      console.error("Chat API Error:", error);
-      res.status(500).json({ error: "抱歉，由于意念波动（网络错误），我暂时无法回应。请稍后再试。" });
+      console.error("Interpret API Error:", error);
+      const { error: msg, detail } = formatArkFailure(error);
+      res.status(500).json({ error: msg, detail });
     }
   });
 
-  // Vite middleware for development
+  app.post("/api/chat", async (req, res) => {
+    try {
+      const { messages, question, interpretation, round, input } = req.body;
+      const client = getArkClient();
+      if (!client) {
+        return res.status(500).json({ error: ERR_NO_ARK_KEY });
+      }
+      const modelId = getArkModelId();
+      const systemInstruction = buildChatSystemInstruction(question, interpretation, round);
+      const history = Array.isArray(messages)
+        ? messages.map((m: { role: string; content: string }) => ({
+            role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+            content: String(m.content ?? ""),
+          }))
+        : [];
+      const chatMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+        { role: "system", content: systemInstruction },
+        ...history,
+        { role: "user", content: String(input ?? "") },
+      ];
+      const completion = (await client.chat.completions.create({
+        model: modelId,
+        messages: chatMessages,
+        stream: false,
+      })) as OpenAI.Chat.ChatCompletion;
+      const text = completion.choices[0]?.message?.content ?? "";
+      return res.json({ text });
+    } catch (error) {
+      console.error("Chat API Error:", error);
+      const { error: msg, detail } = formatArkFailure(error);
+      res.status(500).json({ error: msg, detail });
+    }
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -131,10 +195,10 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
