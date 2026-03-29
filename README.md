@@ -42,44 +42,55 @@
 
 ## 技术架构
 
-本项目采用 **全栈 (Full-Stack)** 架构，确保了极佳的用户体验与最高级别的 API 密钥安全。
+前端由 Vite 构建；AI 请求通过同源 **`/api/interpret`**、**`/api/chat`** 调用，密钥仅在后端环境变量中，不进入浏览器。
 
 ### 技术栈
 
 | 模块 | 技术选型 |
 |---|---|
-| **前端框架** | React 18 + TypeScript + Vite |
-| **样式系统** | Tailwind CSS + Framer Motion |
-| **UI 组件** | Lucide React (图标) + React Markdown |
-| **后端服务** | Node.js + Express (集成在 Vite 中间件) |
-| **数据库与认证** | Firebase (Firestore + Google Auth) |
-| **AI 大模型** | 火山方舟 **Coding Plan**（OpenAI 兼容，默认 `api/coding/v3` + `ark-code-latest`；见 `.env.example`） |
+| **前端框架** | React 19 + TypeScript + Vite 6 |
+| **样式系统** | Tailwind CSS 4 + Framer Motion |
+| **UI 组件** | Lucide React（图标）+ React Markdown + Sonner（Toast） |
+| **本地后端** | Node.js + Express（[`server.ts`](server.ts)：开发态挂载 Vite 中间件，生产态托管 `dist`） |
+| **线上 API（如 Vercel）** | 根目录 [`api/`](api/) 无服务器函数，与 Express **共用** [`server/ark-api.ts`](server/ark-api.ts) 中的方舟调用逻辑 |
+| **数据库与认证** | Firebase（Firestore + Google Auth） |
+| **AI 大模型** | 火山方舟 **Coding Plan**（OpenAI 兼容 SDK，默认 `api/coding/v3` + `ark-code-latest`；见 [`.env.example`](.env.example)） |
 
 ### 核心项目结构
 
 ```text
 /
-├── server.ts                 # Express 后端入口 (处理 AI 请求，保护 API Key)
+├── server.ts                 # Express 入口：挂载 /api/*、Vite 或静态 dist
+├── server/
+│   └── ark-api.ts            # 方舟 interpret/chat 共用逻辑（prompt、OpenAI 调用）
+├── api/
+│   ├── interpret.ts          # Vercel 等：POST /api/interpret
+│   └── chat.ts               # Vercel 等：POST /api/chat
+├── vercel.json               # 可选：SPA 回退、函数 maxDuration 等（部署于 Vercel 时使用）
+├── public/
+│   └── favicon.svg           # 站点图标（镜字圆标）
+├── firebase-applet-config.json   # Firebase 前端配置（被 src/lib/firebase.ts 引用）
+├── index.html
 ├── src/
 │   ├── components/
-│   │   ├── IChing/           # 易经核心业务组件
-│   │   │   ├── Casting.tsx        # 起卦交互组件
-│   │   │   ├── Hexagram.tsx       # SVG 卦象渲染
-│   │   │   ├── Interpretation.tsx # 四面镜子与 AI 观心报告
-│   │   │   └── DeepDialogue.tsx   # 8轮深度对话系统
-│   │   ├── Auth/             # Firebase 登录组件
-│   │   └── Layout/           # 页面布局组件
+│   │   ├── ErrorBoundary.tsx
+│   │   └── IChing/           # Divination、Hexagram、Interpretation、DeepDialogue、History
 │   ├── lib/
-│   │   ├── iching.ts         # 64卦完整数据字典与起卦/变卦算法
-│   │   ├── firebase.ts       # Firebase 初始化与安全封装
-│   │   └── utils.ts          # 工具函数 (Tailwind cn 等)
-│   └── App.tsx               # 路由与状态分发
-├── .env                      # 环境变量 (后端读取)
-└── package.json              # 依赖与脚本
+│   │   ├── iching.ts         # 六十四卦数据与起卦/变卦逻辑
+│   │   ├── firebase.ts       # Firebase 初始化与封装
+│   │   └── utils.ts          # 工具函数（如 cn）
+│   ├── pages/Home.tsx        # 主流程状态机（landing / divination / interpretation / history）
+│   ├── App.tsx               # ErrorBoundary、Toaster、Home
+│   └── main.tsx
+├── .env                      # 本地环境变量（勿提交）
+└── package.json
 ```
 
+路径别名：`@/*` → `src/*`。
+
 ### 安全设计
-- **Firestore 安全规则**：配置了严格的 Firebase Security Rules，确保用户只能读写自己的占卜记录和对话历史。
+- **API 密钥**：`ARK_API_KEY` 仅配置在服务端（本机 `.env` 或托管平台环境变量），前端只请求同源 `/api/*`。
+- **Firestore**：建议配置安全规则，确保用户只能读写自己的 `history` 等数据。
 
 ---
 
@@ -87,9 +98,9 @@
 
 ### 环境要求
 - Node.js 18+
-- [pnpm](https://pnpm.io/)（推荐；亦可用 npm，但仓库以 `pnpm-lock.yaml` 为准）
-- Firebase 项目 (需开启 Firestore 和 Google Auth)
-- 火山方舟 Coding Plan API Key（`ARK_API_KEY`，可选覆盖 `ARK_BASE_URL` / `ARK_MODEL`，见 `.env.example`）
+- [pnpm](https://pnpm.io/)（推荐；仓库以 `pnpm-lock.yaml` 为准）
+- Firebase 项目（需开启 Firestore 和 Google Auth）
+- 火山方舟 API Key（`ARK_API_KEY`，可选覆盖 `ARK_BASE_URL` / `ARK_MODEL`，见 `.env.example`）
 
 ### 快速启动
 
@@ -98,34 +109,36 @@
    pnpm install
    ```
 
-2. **配置环境变量**
-   在根目录创建 `.env` 文件
+2. **配置环境变量**  
+   在根目录创建 `.env`，至少填写 `ARK_API_KEY`（参见 `.env.example`）。
 
-3. **配置 Firebase**
-   确保 `src/lib/firebase-applet-config.json` 中包含正确的 Firebase 配置信息。
+3. **配置 Firebase**  
+   将控制台配置写入仓库根目录的 **`firebase-applet-config.json`**（与 `src/lib/firebase.ts` 中的引用路径一致）。
 
 4. **启动全栈开发服务器**
    ```bash
    pnpm run dev
    ```
-   *此命令会同时启动 Express 后端 API 和 Vite 前端热更新服务。*
+   会启动 Express（`/api/*`）与 Vite 前端热更新，默认 **http://localhost:3000**。
 
-5. **访问应用**
-   打开浏览器访问 `http://localhost:3000`。
+5. **访问应用**  
+   浏览器打开 `http://localhost:3000`。
 
 ---
 
 ## 生产部署
 
-项目已配置为标准的 Node.js 全栈应用构建流程：
-
+### 自建 Node（Express）
 ```bash
-# 1. 构建前端静态文件
-pnpm run build
-
-# 2. 启动生产服务器 (Node.js Express 将接管 API 并提供静态文件服务)
-pnpm run start
+pnpm run build    # 产出 dist/
+pnpm run start    # NODE_ENV=production 时 Express 托管 dist 并提供 /api/*
 ```
+运行前需设置与本地一致的服务端环境变量（含 `ARK_API_KEY`）。若直接 `node server.ts` 无法解析 TypeScript，请使用与开发一致的运行方式（例如通过 `tsx` 或先编译为 JS），以你方运维约定为准。
+
+### 部署到 Vercel（静态前端 + Serverless API）
+- 构建仍为 `pnpm run build`，静态资源来自 `dist/`；**`/api/interpret`**、**`/api/chat`** 由根目录 [`api/`](api/) 下函数提供，逻辑与 [`server/ark-api.ts`](server/ark-api.ts) 一致。
+- 在 Vercel 项目 **Environment Variables** 中配置 **`ARK_API_KEY`**（及按需 `ARK_BASE_URL`、`ARK_MODEL`），**不要**把密钥写进前端代码或公开仓库。
+- 详见仓库根目录 [`vercel.json`](vercel.json)（SPA 回退、`maxDuration` 等）。
 
 ---
 

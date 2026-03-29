@@ -13,7 +13,8 @@
 | 前端 | React 19、TypeScript、Vite 6 |
 | 样式 | Tailwind CSS 4（`@tailwindcss/vite`）、`src/index.css` 中 `@theme` 与字体 |
 | 动效 / UI | Framer Motion、Lucide React、Sonner（Toast）、React Markdown、Recharts（若使用图表） |
-| 服务端 | Node.js，`server.ts` 内 **Express** + 开发态 **Vite middleware**（同源 3000 端口） |
+| 本地服务端 | Node.js，`server.ts` 内 **Express** + 开发态 **Vite middleware**（同源 3000 端口） |
+| 线上 API（Vercel 等） | 根目录 `api/*.ts` 无服务器函数，与 Express **共用** `server/ark-api.ts` |
 | AI | `openai` SDK 指向火山方舟 **Coding Plan** OpenAI 兼容端（默认 `.../api/coding/v3` + `ark-code-latest`）；常规在线推理可改 `ARK_BASE_URL=.../api/v3` 且 `ARK_MODEL=ep-...`） |
 | 数据与登录 | Firebase（`firebase-applet-config.json` 于仓库根目录） |
 
@@ -24,6 +25,13 @@
 ```text
 /
 ├── server.ts                 # Express 入口：/api/* 与 Vite 中间件或生产静态资源
+├── server/
+│   └── ark-api.ts            # 方舟 interpret/chat 共用逻辑（prompt、错误处理、OpenAI 调用）
+├── api/
+│   ├── interpret.ts          # 托管平台（如 Vercel）：POST /api/interpret
+│   └── chat.ts               # POST /api/chat
+├── vercel.json               # 部署于 Vercel 时：SPA 回退、函数配置等
+├── public/                   # 静态资源（如 favicon.svg），构建时拷贝到 dist 根路径
 ├── vite.config.ts            # React + Tailwind 插件；别名 @ → ./src；define APP_URL
 ├── firebase-applet-config.json   # Firebase 前端配置（被 src/lib/firebase.ts 引用）
 ├── firebase-blueprint.json       # 蓝图/参考（按需）
@@ -67,23 +75,24 @@
 | `NODE_ENV` | `production` 时 `server.ts` 走静态 `dist`，否则走 Vite 中间件 |
 | `DISABLE_HMR` | 设为 `true` 时关闭 HMR（注释说明用于 AI Studio 等场景避免频繁刷新） |
 
-`.env` 由 `dotenv` 在 `server.ts` 加载；**勿将含密钥的 `.env` 提交仓库**。
+`.env` 由 `dotenv` 在 `server.ts` 加载；**本地与 Vercel 等托管环境均需单独配置 `ARK_API_KEY`，勿将含密钥的 `.env` 提交仓库**。
 
-## HTTP API（仅服务端）
+## HTTP API
 
-- `POST /api/interpret`：请求体含 `question`、`benGua`、`huGua`、`cuoGua`、`zongGua` 等，返回 `{ text }`。
-- `POST /api/chat`：请求体含 `messages`、`question`、`interpretation`、`round`、`input`，返回 `{ text }`。
+- `POST /api/interpret`：请求体含 `question`、`benGua`、`huGua`、`cuoGua`、`zongGua` 等，成功返回 `{ text }`，失败返回 `{ error, detail }`。
+- `POST /api/chat`：请求体含 `messages`、`question`、`interpretation`、`round`、`input`，成功返回 `{ text }`。
 
-密钥只存在于服务端环境变量，不在浏览器暴露。
+**实现位置**：业务逻辑在 [`server/ark-api.ts`](server/ark-api.ts)；本地由 `server.ts` 挂载；部署到 Vercel 时由 [`api/interpret.ts`](api/interpret.ts)、[`api/chat.ts`](api/chat.ts) 调用同一模块。密钥只存在于服务端环境变量，不在浏览器暴露。
 
 ## 给 AI 助手的实现提示
 
-1. **改 AI 行为**：改 `server.ts` 内 prompt 与 `systemInstruction`（方舟 OpenAI 兼容 API），与产品「只问不判、心理觉察」一致。
+1. **改 AI 行为**：改 [`server/ark-api.ts`](server/ark-api.ts) 中的用户 prompt 与对话 `systemInstruction`，与产品「只问不判、心理觉察」一致（勿仅在 `server.ts` 里找长 prompt，已抽离到 `ark-api`）。
 2. **改卦象与算法**：集中在 `src/lib/iching.ts`。
 3. **改 UI 流程**：`src/pages/Home.tsx` 与各 `src/components/IChing/*` 组件。
 4. **Firebase**：配置在根目录 `firebase-applet-config.json`；Firestore 集合如 `history` 与 `uid` 字段见 `Home.tsx` 查询逻辑。
-5. **类型与质量**：提交前可跑 `pnpm run lint`；避免无关文件的大范围格式化。
-6. **与 README 不一致时**：以代码为准（例如 README 写 React 18，实际为 React 19；Firebase 配置文件路径为根目录 `firebase-applet-config.json`）。
+5. **Vercel**：根目录 `vercel.json` 与 `api/*`；若函数报错，查 Runtime Logs；`maxDuration` 需与套餐上限一致（如 Hobby 可能限制秒数）。
+6. **类型与质量**：提交前可跑 `pnpm run lint`；避免无关文件的大范围格式化。
+7. **与 README 不一致时**：以代码为准。
 
 ## 许可
 
