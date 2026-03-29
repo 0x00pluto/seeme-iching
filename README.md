@@ -87,7 +87,7 @@
 
 ### 环境要求
 - Node.js 18+
-- npm 或 pnpm
+- [pnpm](https://pnpm.io/)（推荐；亦可用 npm，但仓库以 `pnpm-lock.yaml` 为准）
 - Firebase 项目 (需开启 Firestore 和 Google Auth)
 - Google Gemini API Key
 
@@ -95,7 +95,7 @@
 
 1. **克隆项目并安装依赖**
    ```bash
-   npm install
+   pnpm install
    ```
 
 2. **配置环境变量**
@@ -106,7 +106,7 @@
 
 4. **启动全栈开发服务器**
    ```bash
-   npm run dev
+   pnpm run dev
    ```
    *此命令会同时启动 Express 后端 API 和 Vite 前端热更新服务。*
 
@@ -121,10 +121,10 @@
 
 ```bash
 # 1. 构建前端静态文件
-npm run build
+pnpm run build
 
 # 2. 启动生产服务器 (Node.js Express 将接管 API 并提供静态文件服务)
-npm run start
+pnpm run start
 ```
 
 ---
