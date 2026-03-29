@@ -1,18 +1,27 @@
 /**
  * Vercel Serverless：POST /api/chat
  */
-import { runChatApi } from "../server/ark-api.ts";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { runChatApi } from "../server/ark-api.js";
 
-type ApiReq = { method?: string; body?: unknown };
-type ApiRes = {
-  status: (code: number) => { json: (body: unknown) => void };
+export const config = {
+  runtime: "nodejs",
+  maxDuration: 60,
 };
 
-export default async function handler(req: ApiReq, res: ApiRes): Promise<void> {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method Not Allowed" });
-    return;
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  try {
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "Method Not Allowed" });
+      return;
+    }
+    const { status, json } = await runChatApi(req.body);
+    res.status(status).json(json);
+  } catch (e) {
+    console.error("api/chat handler:", e);
+    const message = e instanceof Error ? e.message : String(e);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "服务器内部错误", detail: message });
+    }
   }
-  const { status, json } = await runChatApi(req.body);
-  res.status(status).json(json);
 }

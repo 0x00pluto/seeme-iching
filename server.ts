@@ -2,7 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import dotenv from "dotenv";
-import { runChatApi, runInterpretApi } from "./server/ark-api.ts";
+import { runChatApi, runInterpretApi } from "./server/ark-api.js";
 
 dotenv.config();
 
