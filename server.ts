@@ -1,129 +1,10 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import OpenAI from "openai";
 import dotenv from "dotenv";
+import { runChatApi, runInterpretApi } from "./server/ark-api.ts";
 
 dotenv.config();
-
-/**
- * 默认使用火山方舟 Coding Plan 的 OpenAI 兼容端（勿与通用 /api/v3 混用，见控制台说明）。
- * https://www.volcengine.com/docs/82379/1928261
- */
-const ARK_BASE_URL_DEFAULT = "https://ark.cn-beijing.volces.com/api/coding/v3";
-
-/** Coding 快速配置中的模型标识；常规在线推理可改为 ep- 接入点 */
-const ARK_MODEL_DEFAULT = "ark-code-latest";
-
-const ERR_NO_ARK_KEY =
-  "服务端未配置 ARK_API_KEY。请在火山方舟控制台创建 API Key 并写入 .env：https://www.volcengine.com/docs/82379/1541594";
-
-/** 将 OpenAI SDK / 方舟 抛出的错误转为对用户友好的中文 `error`，并保留 `detail` 原文 */
-function formatArkFailure(error: unknown): { error: string; detail: string } {
-  const detail = error instanceof Error ? error.message : String(error);
-  const lower = detail.toLowerCase();
-
-  if (
-    lower.includes("401") ||
-    lower.includes("unauthorized") ||
-    lower.includes("invalid api key") ||
-    lower.includes("invalid_api_key")
-  ) {
-    return {
-      error: "API Key 无效或未授权。请检查 .env 中的 ARK_API_KEY 是否与火山方舟控制台一致。",
-      detail,
-    };
-  }
-
-  if (
-    lower.includes("endpoint") ||
-    lower.includes("not found") ||
-    lower.includes("invalid model") ||
-    lower.includes("does not exist")
-  ) {
-    return {
-      error:
-        "模型不可用。Coding Plan 默认使用 ARK_MODEL=ark-code-latest；若使用常规在线推理，请将 ARK_BASE_URL 设为 .../api/v3 且 ARK_MODEL 为接入点 ID（ep- 开头）。",
-      detail,
-    };
-  }
-
-  if (
-    lower.includes("insufficient") ||
-    lower.includes("balance") ||
-    lower.includes("quota") ||
-    lower.includes("余额") ||
-    lower.includes("欠费")
-  ) {
-    return {
-      error: "账户余额或调用额度不足，请前往火山引擎控制台检查计费与配额。",
-      detail,
-    };
-  }
-
-  return {
-    error:
-      "AI 调用失败，请检查网络、ARK_API_KEY、ARK_BASE_URL（Coding 用 .../api/coding/v3）与 ARK_MODEL（默认 ark-code-latest 或 ep- 接入点）。",
-    detail,
-  };
-}
-
-function getArkClient() {
-  const apiKey = process.env.ARK_API_KEY?.trim();
-  if (!apiKey) return null;
-  return new OpenAI({
-    apiKey,
-    baseURL: process.env.ARK_BASE_URL?.trim() || ARK_BASE_URL_DEFAULT,
-  });
-}
-
-function getArkModelId(): string {
-  return process.env.ARK_MODEL?.trim() || ARK_MODEL_DEFAULT;
-}
-
-function buildInterpretUserPrompt(question: unknown, benGua: any, huGua: any, cuoGua: any, zongGua: any) {
-  return `
-        你是一位精通易经哲学与深度心理学的引导者。
-        
-        用户的问题/意念: "${question || "未提供具体问题，请进行一般性指引"}"
-        
-        系统通过四面“镜子”捕捉到了以下卦象：
-        1. 现状之镜 (本卦): ${benGua?.name} - 代表当前事态的外部表现与现状。
-        2. 内心之镜 (互卦): ${huGua?.name} - 代表事态内部隐藏的动机、用户的真实内心状态。
-        3. 阴影之镜 (错卦): ${cuoGua?.name} - 代表被忽视的对立面、潜意识中的恐惧或盲点。
-        4. 视角之镜 (综卦): ${zongGua?.name} - 代表换位思考后的客观环境或事态的另一面。
-        
-        请基于这四重维度的交织，为用户提供一份深度的“内省报告”。
-        报告应避免迷信色彩，侧重于心理分析与行动建议：
-        - “观照现状”：分析本卦揭示的处境。
-        - “洞察内心”：通过互卦揭示用户可能未察觉的深层渴望或矛盾。
-        - “直面阴影”：通过错卦提醒用户需要注意的盲区。
-        - “通变之道”：综合四卦，给出如何调整心态或应对的建议。
-        
-        请使用优雅、克制、富有启发性的中文。
-      `;
-}
-
-function buildChatSystemInstruction(question: unknown, interpretation: unknown, round: unknown) {
-  return `你是一位深度心理咨询师与易经哲学引导者。
-      
-      当前对话背景：
-      - 用户的问题: "${question}"
-      - 初始卦象解读: "${interpretation}"
-      - 当前轮次: ${round}/8
-      
-      你的目标：
-      1. 协助用户看见自己的“叙事”（即他们是如何定义自己和处境的）。
-      2. 引导用户发现不同视角的自己（通过错卦、综卦的启发）。
-      3. 探索新的可能性转变。
-      
-      对话规则：
-      - 每次只提一个深刻的问题。
-      - 语气要优雅、克制、富有同理心。
-      - 严禁算命或玄学说教，侧重心理觉察。
-      - 如果是最后一轮（第8轮），请进行总结并给出一个充满希望的结语。
-      - 保持对话的连贯性，基于用户的回答进行追问。`;
-}
 
 async function startServer() {
   const app = express();
@@ -132,60 +13,13 @@ async function startServer() {
   app.use(express.json());
 
   app.post("/api/interpret", async (req, res) => {
-    try {
-      const { question, benGua, huGua, cuoGua, zongGua } = req.body;
-      const client = getArkClient();
-      if (!client) {
-        return res.status(500).json({ error: ERR_NO_ARK_KEY });
-      }
-      const modelId = getArkModelId();
-      const userContent = buildInterpretUserPrompt(question, benGua, huGua, cuoGua, zongGua);
-      const completion = (await client.chat.completions.create({
-        model: modelId,
-        messages: [{ role: "user", content: userContent }],
-        stream: false,
-      })) as OpenAI.Chat.ChatCompletion;
-      const text = completion.choices[0]?.message?.content ?? "";
-      return res.json({ text });
-    } catch (error) {
-      console.error("Interpret API Error:", error);
-      const { error: msg, detail } = formatArkFailure(error);
-      res.status(500).json({ error: msg, detail });
-    }
+    const { status, json } = await runInterpretApi(req.body);
+    res.status(status).json(json);
   });
 
   app.post("/api/chat", async (req, res) => {
-    try {
-      const { messages, question, interpretation, round, input } = req.body;
-      const client = getArkClient();
-      if (!client) {
-        return res.status(500).json({ error: ERR_NO_ARK_KEY });
-      }
-      const modelId = getArkModelId();
-      const systemInstruction = buildChatSystemInstruction(question, interpretation, round);
-      const history = Array.isArray(messages)
-        ? messages.map((m: { role: string; content: string }) => ({
-            role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
-            content: String(m.content ?? ""),
-          }))
-        : [];
-      const chatMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-        { role: "system", content: systemInstruction },
-        ...history,
-        { role: "user", content: String(input ?? "") },
-      ];
-      const completion = (await client.chat.completions.create({
-        model: modelId,
-        messages: chatMessages,
-        stream: false,
-      })) as OpenAI.Chat.ChatCompletion;
-      const text = completion.choices[0]?.message?.content ?? "";
-      return res.json({ text });
-    } catch (error) {
-      console.error("Chat API Error:", error);
-      const { error: msg, detail } = formatArkFailure(error);
-      res.status(500).json({ error: msg, detail });
-    }
+    const { status, json } = await runChatApi(req.body);
+    res.status(status).json(json);
   });
 
   if (process.env.NODE_ENV !== "production") {
