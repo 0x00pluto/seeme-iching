@@ -84,6 +84,19 @@
 
 **实现位置**：业务逻辑在 [`server/ark-api.ts`](server/ark-api.ts)；本地由 `server.ts` 挂载；部署到 Vercel 时由 [`api/interpret.ts`](api/interpret.ts)、[`api/chat.ts`](api/chat.ts) 调用同一模块。密钥只存在于服务端环境变量，不在浏览器暴露。
 
+## Vercel 路由坑（避免重复踩）
+
+Vercel 的 Serverless Functions 路由是 **按 `api/` 下文件路径映射**的：
+
+- `api/foo.ts` → `/api/foo`
+- `api/foo/bar.ts` → `/api/foo/bar`
+
+因此如果你需要 `/api/chat/stream` 这样的路径，**必须**创建：
+
+- `api/chat/stream.ts`（而不是 `api/chat-stream.ts`）
+
+否则很容易出现 “The page could not be found / NOT_FOUND / HTTP 404”，并且这个问题容易在重构时反复发生。
+
 ## 给 AI 助手的实现提示
 
 1. **改 AI 行为**：改 [`server/ark-api.ts`](server/ark-api.ts) 中的用户 prompt 与对话 `systemInstruction`，与产品「只问不判、心理觉察」一致（勿仅在 `server.ts` 里找长 prompt，已抽离到 `ark-api`）。
