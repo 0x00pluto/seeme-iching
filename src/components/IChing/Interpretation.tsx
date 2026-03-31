@@ -3,8 +3,9 @@ import { HEXAGRAMS, LineType, getBinary, getCuoGuaLines, getHuGuaLines, getZongG
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { BookOpen, Compass, Eye, Ghost, Heart, Loader2, MessageCircle, Share2 } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { DeepDialogue } from "./DeepDialogue";
 import { Hexagram } from "./Hexagram";
 
@@ -12,6 +13,55 @@ interface InterpretationProps {
   lines: LineType[];
   question?: string;
   onSave?: (interpretation: string) => void;
+}
+
+const TABLE_SEPARATOR_REGEX = /\|(?:\s*:?-{3,}:?\s*\|)+/g;
+
+function normalizeMarkdownTables(markdown: string): string {
+  if (!markdown.includes("|")) return markdown;
+
+  // Streaming output occasionally merges table rows into one line, so we split obvious row boundaries.
+  let normalized = markdown.replace(/\r\n/g, "\n").replace(/\|\s+\|/g, "|\n|");
+
+  normalized = normalized.replace(/([^\n])(\|(?:\s*:?-{3,}:?\s*\|)+)/g, "$1\n$2");
+  normalized = normalized.replace(/(\|(?:\s*:?-{3,}:?\s*\|)+)([^\n])/g, "$1\n$2");
+
+  const lines = normalized.split("\n");
+  const fixedLines: string[] = [];
+
+  for (const line of lines) {
+    if (!line.includes("|")) {
+      fixedLines.push(line);
+      continue;
+    }
+
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+      fixedLines.push(trimmed);
+      continue;
+    }
+
+    const firstPipe = line.indexOf("|");
+    const lastPipe = line.lastIndexOf("|");
+    if (firstPipe > 0 && lastPipe > firstPipe) {
+      const prefix = line.slice(0, firstPipe).trimEnd();
+      const row = line.slice(firstPipe, lastPipe + 1).trim();
+      const suffix = line.slice(lastPipe + 1).trimStart();
+      if (prefix) fixedLines.push(prefix);
+      fixedLines.push(row);
+      if (suffix) fixedLines.push(suffix);
+      continue;
+    }
+
+    fixedLines.push(line);
+  }
+
+  return fixedLines
+    .join("\n")
+    .replace(TABLE_SEPARATOR_REGEX, (match) => `\n${match.trim()}\n`)
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export const Interpretation: React.FC<InterpretationProps> = ({ lines, question, onSave }) => {
@@ -103,6 +153,7 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
     { title: "阴影之镜", gua: cuoGua, lines: cuoLines, icon: Ghost, color: "text-blue-600" },
     { title: "视角之镜", gua: zongGua, lines: zongLines, icon: Compass, color: "text-emerald-600" },
   ];
+  const normalizedInterpretation = useMemo(() => normalizeMarkdownTables(interpretation), [interpretation]);
 
   return (
     <div className="max-w-6xl mx-auto py-12 px-6 flex flex-col gap-12">
@@ -179,7 +230,7 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
           ) : interpretation.trim().length > 0 ? (
             <div className="flex flex-col gap-6">
               <div className="prose prose-ink max-w-none font-serif text-xl leading-relaxed text-ink/70">
-                <ReactMarkdown>{interpretation}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{normalizedInterpretation}</ReactMarkdown>
               </div>
               {isLoading && (
                 <div className="flex items-center justify-center gap-2 text-[11px] text-ink/25 font-serif italic tracking-widest">
