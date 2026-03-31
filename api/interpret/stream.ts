@@ -3,7 +3,7 @@
  * 注意：在 Vercel 上仍会受 maxDuration 限制（例如 60s），SSE 到点会被掐断。
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { runInterpretStream } from "../server/ark-api.js";
+import { runInterpretStream } from "../../server/ark-api.js";
 
 export const config = {
   runtime: "nodejs",
