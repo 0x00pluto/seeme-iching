@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { db, auth, handleFirestoreError, OperationType } from "@/lib/firebase";
 import { doc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
 import { cn } from "@/lib/utils";
+import { streamDeepChat } from "@/lib/ark-client";
 
 interface Message {
   role: "user" | "assistant";
@@ -26,6 +27,7 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
   const [round, setRound] = useState(1);
   const [sessionId] = useState(() => `dialogue_${Date.now()}`);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     // Initial system message or greeting
@@ -74,51 +76,56 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
   const handleSend = async () => {
     if (!input.trim() || isLoading || round > 8) return;
 
-    const userMsg: Message = { role: "user", content: input, timestamp: Date.now() };
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const userContent = input;
+    const userMsg: Message = { role: "user", content: userContent, timestamp: Date.now() };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput("");
     setIsLoading(true);
 
       try {
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages,
+        const assistantTimestamp = Date.now();
+        const assistantPlaceholder: Message = { role: "assistant", content: "", timestamp: assistantTimestamp };
+        setMessages((prev) => [...prev, assistantPlaceholder]);
+
+        let assistantContent = "";
+
+        await streamDeepChat(
+          {
+            messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
             question,
             interpretation,
             round,
-            input
-          }),
-        });
+            input: userContent,
+          },
+          {
+            onDelta: (delta) => {
+              assistantContent += delta;
+              setMessages((prev) => {
+                const idx = prev.findIndex((m) => m.role === "assistant" && m.timestamp === assistantTimestamp);
+                if (idx < 0) return prev;
+                const next = [...prev];
+                next[idx] = { ...next[idx], content: next[idx].content + delta };
+                return next;
+              });
+            },
+          },
+          { signal: controller.signal }
+        );
 
-        const data = await response.json().catch(() => ({} as { error?: string; detail?: string; text?: string }));
-        if (!response.ok) {
-          const base =
-            typeof data.error === "string" && data.error
-              ? data.error
-              : "API request failed";
-          const detail =
-            typeof data.detail === "string" && data.detail.trim()
-              ? data.detail.trim()
-              : "";
-          throw new Error(detail ? `${base}\n\n${detail}` : base);
-        }
-
-        const assistantMsg: Message = { 
-          role: "assistant", 
-          content: data.text || "我正在深思，请稍后再试。", 
-          timestamp: Date.now() 
-        };
-        
-        const finalMessages = [...newMessages, assistantMsg];
+        const finalAssistant = assistantContent.trim() ? assistantContent : "我正在深思，请稍后再试。";
+        const finalMessages = [...newMessages, { role: "assistant", content: finalAssistant, timestamp: assistantTimestamp }];
         setMessages(finalMessages);
-        setRound(prev => prev + 1);
-        saveSession(finalMessages, round + 1);
+
+        const nextRound = round + 1;
+        setRound(nextRound);
+        saveSession(finalMessages, nextRound);
       } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
         console.error("API Error:", error);
         const fallback = "抱歉，由于意念波动（网络错误），我暂时无法回应。请稍后再试。";
         const content =
@@ -130,6 +137,12 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   return (
     <motion.div 

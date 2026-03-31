@@ -121,6 +121,11 @@ function buildChatSystemInstruction(question: unknown, interpretation: unknown, 
 
 export type ArkJsonResponse = Record<string, unknown>;
 
+export type ArkStreamDelta =
+  | { type: "delta"; delta: string }
+  | { type: "error"; error: string; detail?: string }
+  | { type: "done" };
+
 export async function runInterpretApi(body: unknown): Promise<{ status: number; json: ArkJsonResponse }> {
   try {
     const b = body as {
@@ -187,5 +192,86 @@ export async function runChatApi(body: unknown): Promise<{ status: number; json:
     console.error("Chat API Error:", error);
     const { error: msg, detail } = formatArkFailure(error);
     return { status: 500, json: { error: msg, detail } };
+  }
+}
+
+export async function* runInterpretStream(body: unknown): AsyncGenerator<ArkStreamDelta, void, void> {
+  try {
+    const b = body as {
+      question?: unknown;
+      benGua?: unknown;
+      huGua?: unknown;
+      cuoGua?: unknown;
+      zongGua?: unknown;
+    };
+    const client = getArkClient();
+    if (!client) {
+      yield { type: "error", error: ERR_NO_ARK_KEY };
+      return;
+    }
+    const modelId = getArkModelId();
+    const userContent = buildInterpretUserPrompt(b.question, b.benGua, b.huGua, b.cuoGua, b.zongGua);
+
+    const stream = await client.chat.completions.create({
+      model: modelId,
+      messages: [{ role: "user", content: userContent }],
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta?.content ?? "";
+      if (delta) yield { type: "delta", delta };
+    }
+    yield { type: "done" };
+  } catch (error) {
+    console.error("Interpret Stream Error:", error);
+    const { error: msg, detail } = formatArkFailure(error);
+    yield { type: "error", error: msg, detail };
+  }
+}
+
+export async function* runChatStream(body: unknown): AsyncGenerator<ArkStreamDelta, void, void> {
+  try {
+    const b = body as {
+      messages?: { role: string; content: string }[];
+      question?: unknown;
+      interpretation?: unknown;
+      round?: unknown;
+      input?: unknown;
+    };
+    const client = getArkClient();
+    if (!client) {
+      yield { type: "error", error: ERR_NO_ARK_KEY };
+      return;
+    }
+    const modelId = getArkModelId();
+    const systemInstruction = buildChatSystemInstruction(b.question, b.interpretation, b.round);
+    const history = Array.isArray(b.messages)
+      ? b.messages.map((m) => ({
+          role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+          content: String(m.content ?? ""),
+        }))
+      : [];
+    const chatMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      { role: "system", content: systemInstruction },
+      ...history,
+      { role: "user", content: String(b.input ?? "") },
+    ];
+
+    const stream = await client.chat.completions.create({
+      model: modelId,
+      messages: chatMessages,
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta?.content ?? "";
+      if (delta) yield { type: "delta", delta };
+    }
+    yield { type: "done" };
+  } catch (error) {
+    console.error("Chat Stream Error:", error);
+    const { error: msg, detail } = formatArkFailure(error);
+    yield { type: "error", error: msg, detail };
   }
 }

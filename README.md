@@ -89,8 +89,7 @@
 路径别名：`@/*` → `src/*`。
 
 ### 安全设计
-- **API 密钥**：`ARK_API_KEY` 仅配置在服务端（本机 `.env` 或托管平台环境变量），前端只请求同源 `/api/*`。
-- **Firestore**：建议配置安全规则，确保用户只能读写自己的 `history` 等数据。
+- **API 密钥（当前实现）**：使用 **同源流式代理**，`ARK_API_KEY` 仅存在于服务端（本机 `.env` 或托管平台环境变量）。前端不直连方舟域名，从而避免 CORS 与浏览器暴露 key。\n+  - 前端使用：`POST /api/interpret/stream`、`POST /api/chat/stream`（SSE 流式返回）。\n+  - 注意：若把该代理部署在 Vercel 等 serverless 上，仍可能受 `maxDuration`（例如 60s）限制，连接到点会被掐断。\n+- **Firestore**：建议配置安全规则，确保用户只能读写自己的 `history` 等数据。
 
 ---
 
@@ -100,7 +99,7 @@
 - Node.js 18+
 - [pnpm](https://pnpm.io/)（推荐；仓库以 `pnpm-lock.yaml` 为准）
 - Firebase 项目（需开启 Firestore 和 Google Auth）
-- 火山方舟 API Key（`ARK_API_KEY`，可选覆盖 `ARK_BASE_URL` / `ARK_MODEL`，见 `.env.example`）
+- 火山方舟 API Key（服务端：`ARK_API_KEY`，可选覆盖 `ARK_BASE_URL` / `ARK_MODEL`，见 `.env.example`）
 
 ### 快速启动
 

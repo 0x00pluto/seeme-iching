@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Hexagram } from "./Hexagram";
 import { LineType, HEXAGRAMS, getBinary, getHuGuaLines, getCuoGuaLines, getZongGuaLines } from "@/lib/iching";
@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Loader2, Share2, BookOpen, MessageCircle, Eye, Heart, Ghost, Compass, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { DeepDialogue } from "./DeepDialogue";
+import { streamInterpret } from "@/lib/ark-client";
 
 interface InterpretationProps {
   lines: LineType[];
@@ -19,6 +20,15 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
   const [error, setError] = useState<string | null>(null);
   const [reflection, setReflection] = useState("");
   const [showDialogue, setShowDialogue] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const [thinkingHint, setThinkingHint] = useState<string>("正在取象、观心、通变...");
+  const [hasReceivedDelta, setHasReceivedDelta] = useState(false);
+
+  const THINKING_HINTS = [
+    "镜面起雾，卦象正在成形…",
+    "取象未毕，先让心静一息…",
+    "四镜对照之中，答案正在显影…",
+  ];
 
   // Derive the 4 mirrors
   const benLines = lines;
@@ -33,38 +43,40 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
 
   useEffect(() => {
     const fetchInterpretation = async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       setIsLoading(true);
       setError(null);
+      setInterpretation("");
+      setHasReceivedDelta(false);
+      setThinkingHint(THINKING_HINTS[Math.floor(Math.random() * THINKING_HINTS.length)] ?? "正在取象、观心、通变...");
       try {
-        const response = await fetch("/api/interpret", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
+        let receivedAny = false;
+        await streamInterpret(
+          {
             question,
             benGua,
             huGua,
             cuoGua,
-            zongGua
-          }),
-        });
+            zongGua,
+          },
+          {
+            onDelta: (delta) => {
+              receivedAny = true;
+              setHasReceivedDelta(true);
+              setInterpretation((prev) => prev + delta);
+            },
+          },
+          { signal: controller.signal }
+        );
 
-        const data = await response.json().catch(() => ({} as { error?: string; detail?: string; text?: string }));
-        if (!response.ok) {
-          const base =
-            typeof data.error === "string" && data.error
-              ? data.error
-              : "API request failed";
-          const detail =
-            typeof data.detail === "string" && data.detail.trim()
-              ? data.detail.trim()
-              : "";
-          throw new Error(detail ? `${base}\n\n${detail}` : base);
+        if (!receivedAny) {
+          setInterpretation("未能生成解读，请稍后再试。");
         }
-
-        setInterpretation(data.text || "未能生成解读，请稍后再试。");
       } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
         console.error("API Error:", err);
         const hint =
           err instanceof Error && err.message !== "API request failed"
@@ -78,6 +90,12 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
 
     fetchInterpretation();
   }, [lines, question, benGua, huGua, cuoGua, zongGua]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const mirrors = [
     { title: "现状之镜", gua: benGua, lines: benLines, icon: Eye, color: "text-ink" },
@@ -146,6 +164,14 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
             <div className="h-px w-32 bg-ink/10" />
           </div>
 
+          {isLoading && !error && !hasReceivedDelta && (
+            <div className="flex flex-col items-center text-center -mt-4 mb-8">
+              <div className="text-sm text-ink/30 font-serif italic tracking-widest animate-pulse">
+                {thinkingHint}
+              </div>
+            </div>
+          )}
+
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-24 gap-8">
               <div className="relative">
@@ -154,7 +180,6 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
                   <div className="w-3 h-3 bg-accent rounded-full animate-ping" />
                 </div>
               </div>
-              <div className="text-xl text-ink/30 font-serif italic animate-pulse tracking-widest">正在取象、观心、通变...</div>
             </div>
           ) : error ? (
             <div className="text-center py-16 text-accent/60 font-serif italic whitespace-pre-wrap text-sm max-w-xl mx-auto px-4">
