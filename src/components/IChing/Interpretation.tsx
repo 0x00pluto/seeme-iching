@@ -172,7 +172,23 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
             </div>
           )}
 
-          {isLoading ? (
+          {error ? (
+            <div className="text-center py-16 text-accent/60 font-serif italic whitespace-pre-wrap text-sm max-w-xl mx-auto px-4">
+              {error}
+            </div>
+          ) : interpretation.trim().length > 0 ? (
+            <div className="flex flex-col gap-6">
+              <div className="prose prose-ink max-w-none font-serif text-xl leading-relaxed text-ink/70">
+                <ReactMarkdown>{interpretation}</ReactMarkdown>
+              </div>
+              {isLoading && (
+                <div className="flex items-center justify-center gap-2 text-[11px] text-ink/25 font-serif italic tracking-widest">
+                  <Loader2 size={14} className="animate-spin text-accent" />
+                  <span>生成中…</span>
+                </div>
+              )}
+            </div>
+          ) : (
             <div className="flex flex-col items-center justify-center py-24 gap-8">
               <div className="relative">
                 <Loader2 className="animate-spin text-accent" size={56} />
@@ -180,14 +196,6 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
                   <div className="w-3 h-3 bg-accent rounded-full animate-ping" />
                 </div>
               </div>
-            </div>
-          ) : error ? (
-            <div className="text-center py-16 text-accent/60 font-serif italic whitespace-pre-wrap text-sm max-w-xl mx-auto px-4">
-              {error}
-            </div>
-          ) : (
-            <div className="prose prose-ink max-w-none font-serif text-xl leading-relaxed text-ink/70">
-              <ReactMarkdown>{interpretation}</ReactMarkdown>
             </div>
           )}
         </div>
