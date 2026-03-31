@@ -20,6 +20,7 @@ export const Home: React.FC = () => {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const canStartDivination = question.trim().length > 0;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -125,6 +126,7 @@ export const Home: React.FC = () => {
   };
 
   const startDivination = () => {
+    if (!canStartDivination) return;
     setState("divination");
   };
 
@@ -256,12 +258,29 @@ export const Home: React.FC = () => {
 
                 <button
                   onClick={startDivination}
-                  className="group relative px-16 py-8 rounded-full bg-ink text-bg font-serif text-2xl font-bold tracking-[0.2em] overflow-hidden transition-all active:scale-95 shadow-2xl shadow-ink/20 hover:shadow-accent/20"
+                  disabled={!canStartDivination}
+                  className={cn(
+                    "group relative px-16 py-8 rounded-full bg-ink text-bg font-serif text-2xl font-bold tracking-[0.2em] overflow-hidden transition-all shadow-2xl shadow-ink/20",
+                    canStartDivination
+                      ? "active:scale-95 hover:shadow-accent/20 cursor-pointer"
+                      : "opacity-40 cursor-not-allowed"
+                  )}
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-accent/0 via-accent/20 to-accent/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                  <div
+                    className={cn(
+                      "absolute inset-0 bg-gradient-to-r from-accent/0 via-accent/20 to-accent/0 transition-transform duration-1000",
+                      canStartDivination ? "-translate-x-full group-hover:translate-x-full" : "-translate-x-full"
+                    )}
+                  />
                   <span className="relative flex items-center justify-center gap-4">
                     进入镜中
-                    <ChevronRight size={24} className="opacity-20 group-hover:translate-x-2 transition-transform" />
+                    <ChevronRight
+                      size={24}
+                      className={cn(
+                        "opacity-20 transition-transform",
+                        canStartDivination ? "group-hover:translate-x-2" : ""
+                      )}
+                    />
                   </span>
                 </button>
               </div>

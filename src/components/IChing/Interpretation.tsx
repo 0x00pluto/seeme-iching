@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Hexagram } from "./Hexagram";
-import { LineType, HEXAGRAMS, getBinary, getHuGuaLines, getCuoGuaLines, getZongGuaLines } from "@/lib/iching";
+import { streamInterpret } from "@/lib/ark-client";
+import { HEXAGRAMS, LineType, getBinary, getCuoGuaLines, getHuGuaLines, getZongGuaLines } from "@/lib/iching";
 import { cn } from "@/lib/utils";
-import { Loader2, Share2, BookOpen, MessageCircle, Eye, Heart, Ghost, Compass, Sparkles } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { BookOpen, Compass, Eye, Ghost, Heart, Loader2, MessageCircle, Share2 } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { DeepDialogue } from "./DeepDialogue";
-import { streamInterpret } from "@/lib/ark-client";
+import { Hexagram } from "./Hexagram";
 
 interface InterpretationProps {
   lines: LineType[];
