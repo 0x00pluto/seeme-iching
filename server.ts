@@ -9,6 +9,7 @@ import {
   createSseStreamLog,
   interpretStreamMeta,
 } from "./server/sse-stream-log.js";
+import { flushHeadersAndInitialSsePing } from "./server/sse-warmup.js";
 
 dotenv.config();
 
@@ -38,6 +39,8 @@ async function startServer() {
       res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache, no-transform");
       res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      flushHeadersAndInitialSsePing(res);
       log.sseHeadersSet();
       await pipeArkStreamToSse(res, runInterpretStream(req.body), log);
     } catch (e) {
@@ -68,6 +71,8 @@ async function startServer() {
       res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache, no-transform");
       res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      flushHeadersAndInitialSsePing(res);
       log.sseHeadersSet();
       await pipeArkStreamToSse(res, runChatStream(req.body), log);
     } catch (e) {

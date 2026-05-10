@@ -6,6 +6,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { runChatStream } from "../../server/ark-api.js";
 import { pipeArkStreamToSse } from "../../server/pipe-ark-sse.js";
 import { chatStreamMeta, createSseStreamLog } from "../../server/sse-stream-log.js";
+import { flushHeadersAndInitialSsePing } from "../../server/sse-warmup.js";
 
 export const config = {
   runtime: "nodejs",
@@ -28,6 +29,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    flushHeadersAndInitialSsePing(res);
     log.sseHeadersSet();
 
     await pipeArkStreamToSse(res, runChatStream(req.body), log);
