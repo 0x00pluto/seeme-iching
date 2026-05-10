@@ -1,11 +1,11 @@
 import type { ArkStreamDelta } from "./ark-api.js";
 import type { SseStreamLog } from "./sse-stream-log.js";
-import { getSsePeriodicPingMs } from "./sse-warmup.js";
+import { getSsePeriodicPingMs, sseEmptyModelDeltaHeartbeat } from "./sse-warmup.js";
 
 /**
  * 将 ark-api 的 AsyncGenerator 按现有契约写入 HTTP SSE，并打点日志。
  * Express 与 Vercel 共用。
- * 在首包 model token 前可能长时间无 data 行，故用定时 SSE 注释保活（与 handler 内首包 ping 配合）。
+ * 在首包 model token 前可能长时间无真实文本，定时下发空 `data:` delta 保活（与 handler 首包一致）。
  */
 export async function pipeArkStreamToSse(
   res: { write(chunk: string): boolean; end(cb?: () => void): unknown },
@@ -13,9 +13,10 @@ export async function pipeArkStreamToSse(
   log: SseStreamLog
 ): Promise<void> {
   const periodicPingMs = getSsePeriodicPingMs();
+  const heartbeatLine = sseEmptyModelDeltaHeartbeat();
   const keepaliveTimer = setInterval(() => {
     try {
-      res.write(": ping\n\n");
+      res.write(heartbeatLine);
     } catch {
       clearInterval(keepaliveTimer);
     }
