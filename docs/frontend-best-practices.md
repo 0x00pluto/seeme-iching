@@ -301,7 +301,7 @@ v4 仍支持 `@apply`，但不是好实践。组件复用应当抽 React 组件�
 
 **Don't**:
 
-- 不要直接 `await res.text()` 然后整段渲染——那会丢掉流式体验，且 60s 套餐下大概率超时。
+- 不要直接 `await res.text()` 然后整段渲染——那会丢掉流式体验，且在后端 `maxDuration` 有限时整段等待易超时。
 - 不要在客户端拼 prompt——所有 prompt 集中在 [`server/ark-api.ts`](../server/ark-api.ts)，前端只传业务字段（`question`、`benGua`、`huGua`、`cuoGua`、`zongGua`）。
 
 ### 7.3 流式渲染的边界处理

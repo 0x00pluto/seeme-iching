@@ -6,7 +6,7 @@ import { runChatApi } from "../server/ark-api.js";
 
 export const config = {
   runtime: "nodejs",
-  maxDuration: 60,
+  maxDuration: 300,
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {

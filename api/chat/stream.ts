@@ -1,13 +1,13 @@
 /**
  * Vercel Serverless：POST /api/chat/stream
- * 注意：在 Vercel 上仍会受 maxDuration 限制（例如 60s），SSE 到点会被掐断。
+ * 注意：在 Vercel 上仍会受 maxDuration 限制（当前 300s），SSE 到点会被掐断。
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { runChatStream } from "../../server/ark-api.js";
 
 export const config = {
   runtime: "nodejs",
-  maxDuration: 60,
+  maxDuration: 300,
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {

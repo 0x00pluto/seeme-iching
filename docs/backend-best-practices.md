@@ -98,7 +98,7 @@ import { runChatApi } from "../server/ark-api.js";
 
 export const config = {
   runtime: "nodejs",
-  maxDuration: 60,
+  maxDuration: 300,
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -281,7 +281,7 @@ res.end();
 /** 显式 Node 运行时：OpenAI SDK 依赖 Node API，勿用 Edge。 */
 export const config = {
   runtime: "nodejs",
-  maxDuration: 60,
+  maxDuration: 300,
 };
 ```
 
@@ -496,7 +496,7 @@ export async function runChatApi(body: unknown, ctx: { uid?: string; ip?: string
 
 本仓库的影响：
 
-- [`vercel.json:11-18`](../vercel.json) 与 [`api/*.ts`](../api/) 都写 `maxDuration: 60`，**这是项目自己设的上限，远低于平台允许的 300s**。AI 调用慢时如果开始频繁超时，可以先把这里调到 120 或 180，再观察。
+- [`vercel.json`](../vercel.json) 中 `functions["api/**/*.ts"]` 与 [`api/*.ts`](../api/) 内 `export const config` 均设 `maxDuration: 300`，与 Hobby 下 Fluid Compute 的常见上限对齐。若仍有超长生成需求，可在 Pro 上将单函数上限调至更高（最高 800s）或改为分段生成等非 serverless 方案。
 - 4.5 MB 的请求/响应上限对本项目影响小：用户问题 + 卦象 JSON 通常 < 10KB，AI 长文本响应 < 50KB。不要"未来感"地加大输入字段（如附件上传）—— 一旦超 4.5 MB 就要走前端直传 OSS / 预签名 URL。
 - **进程内缓存不可信**：Serverless 实例可能被销毁、可能并行多实例，任何 `const cache = new Map()` 都不能跨调用共享。需要共享必须 Redis / KV。
 

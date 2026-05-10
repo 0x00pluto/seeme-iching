@@ -8,7 +8,7 @@ import { runInterpretApi } from "../server/ark-api.js";
 /** 显式 Node 运行时：OpenAI SDK 依赖 Node API，勿用 Edge。 */
 export const config = {
   runtime: "nodejs",
-  maxDuration: 60,
+  maxDuration: 300,
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {

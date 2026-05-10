@@ -88,7 +88,7 @@
 ### 安全设计
 - **API 密钥（当前实现）**：使用 **同源流式代理**，`ARK_API_KEY` 仅存在于服务端（本机 `.env` 或托管平台环境变量）。前端不直连方舟域名，从而避免 CORS 与浏览器暴露 key。
   - 前端使用：`POST /api/interpret/stream`、`POST /api/chat/stream`（SSE 流式返回）。
-  - 注意：若把该代理部署在 Vercel 等 serverless 上，仍可能受 `maxDuration`（例如 60s）限制，连接可能被掐断。
+  - 注意：若把该代理部署在 Vercel 等 serverless 上，仍可能受 `maxDuration`（当前配置为 300s）限制，连接可能被掐断。
 - **本地档案**：`localStorage` 仅在用户本机可见；共用设备时注意隐私与清除浏览器数据的影响。
 
 ---
