@@ -5,7 +5,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { runInterpretStream } from "../../server/ark-api.js";
 import { pipeArkStreamToSse } from "../../server/pipe-ark-sse.js";
-import { createSseStreamLog, interpretStreamMeta } from "../../server/sse-stream-log.js";
 import { flushHeadersAndInitialSsePing } from "../../server/sse-warmup.js";
 
 export const config = {
@@ -19,11 +18,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  const log = createSseStreamLog("POST /api/interpret/stream", interpretStreamMeta(req.body));
-  req.on("close", () => {
-    log.clientDisconnected("incoming_message_close");
-  });
-
   try {
     res.status(200);
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -31,16 +25,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
     flushHeadersAndInitialSsePing(res);
-    log.sseHeadersSet();
 
-    await pipeArkStreamToSse(res, runInterpretStream(req.body), log);
+    await pipeArkStreamToSse(res, runInterpretStream(req.body));
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     if (!res.headersSent) {
-      log.streamEnd("handler_exception_before_headers", { detail: message });
       res.status(500).json({ error: "服务器内部错误", detail: message });
     } else {
-      log.streamEnd("handler_exception_after_headers", { detail: message });
       try {
         res.write(`data: ${JSON.stringify({ error: "服务器内部错误", detail: message })}\n\n`);
         res.write("data: [DONE]\n\n");

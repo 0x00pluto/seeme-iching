@@ -13,6 +13,7 @@
 | 你在做什么 | 打开 |
 |------------|------|
 | 后端 API、AI Prompt、方舟调用、SSE、密钥、`ARK_*`、Express / Vercel 双运行时、部署与路由 | [backend-best-practices.md](./backend-best-practices.md) |
+| 仅排查 **线上 SSE 断连**（`ERR_CONNECTION_CLOSED`、Vercel 与本地不一致） | [faq-sse-vercel.md](./faq-sse-vercel.md) |
 | 前端页面与组件、React/Vite/Tailwind、同源 SSE 消费、localStorage | [frontend-best-practices.md](./frontend-best-practices.md) |
 | 仅需要仓库一句话定位 | [`AGENTS.md`](../AGENTS.md) |
 
@@ -26,6 +27,10 @@
 
 前端落地指南：React / Vite / Tailwind v4、`@/` 别名；**新页面与新功能优先 shadcn/ui**（§3）；环境变量与 `define`、SSE 客户端与本地持久化等，附代码引用与反例。
 
+### [faq-sse-vercel.md](./faq-sse-vercel.md)
+
+线上同源 SSE（`/api/*/stream`）偶发断连：原因摘要、`SSE_PERIODIC_PING_MS`、改动文件入口与自助排查。
+
 ## 速查指针（不重复长表）
 
 以下为「去哪一节查」的索引；正文以后端/前端文档为准。
@@ -35,5 +40,6 @@
 | 环境变量（`ARK_API_KEY`、`ARK_BASE_URL`、`ARK_MODEL` 等） | [backend-best-practices.md §7](./backend-best-practices.md#7-环境变量与密钥) |
 | `POST /api/interpret`、`/api/chat` 及共享实现位置 | [backend-best-practices.md](./backend-best-practices.md)（§1 架构、§2 双运行时） |
 | Vercel `api/foo/bar.ts` → `/api/foo/bar` 路由约定 | [backend-best-practices.md §3](./backend-best-practices.md#3-vercel-文件路由约定) |
+| 线上 SSE 断连、空 delta 保活、`SSE_PERIODIC_PING_MS` | [faq-sse-vercel.md](./faq-sse-vercel.md) |
 | 客户端 Vite 与流式请求、localStorage | [frontend-best-practices.md](./frontend-best-practices.md) |
 | shadcn/ui、新页面 UI 约定、`components.json` | [frontend-best-practices.md §3](./frontend-best-practices.md#3-shadcnui新页面与新功能) |
