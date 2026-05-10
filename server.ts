@@ -3,6 +3,12 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import dotenv from "dotenv";
 import { runChatApi, runChatStream, runInterpretApi, runInterpretStream } from "./server/ark-api.js";
+import { pipeArkStreamToSse } from "./server/pipe-ark-sse.js";
+import {
+  chatStreamMeta,
+  createSseStreamLog,
+  interpretStreamMeta,
+} from "./server/sse-stream-log.js";
 
 dotenv.config();
 
@@ -23,53 +29,63 @@ async function startServer() {
   });
 
   app.post("/api/interpret/stream", async (req, res) => {
-    res.status(200);
-    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
-    res.setHeader("Connection", "keep-alive");
-
-    for await (const evt of runInterpretStream(req.body)) {
-      if (evt.type === "delta") {
-        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: evt.delta } }] })}\n\n`);
-      } else if (evt.type === "error") {
-        res.write(`data: ${JSON.stringify({ error: evt.error, detail: evt.detail ?? "" })}\n\n`);
-        res.write("data: [DONE]\n\n");
-        res.end();
-        return;
-      } else if (evt.type === "done") {
-        res.write("data: [DONE]\n\n");
-        res.end();
-        return;
+    const log = createSseStreamLog("POST /api/interpret/stream", interpretStreamMeta(req.body));
+    req.on("close", () => {
+      log.clientDisconnected("incoming_message_close");
+    });
+    try {
+      res.status(200);
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      log.sseHeadersSet();
+      await pipeArkStreamToSse(res, runInterpretStream(req.body), log);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (!res.headersSent) {
+        log.streamEnd("handler_exception_before_headers", { detail: message });
+        res.status(500).json({ error: "服务器内部错误", detail: message });
+      } else {
+        log.streamEnd("handler_exception_after_headers", { detail: message });
+        try {
+          res.write(`data: ${JSON.stringify({ error: "服务器内部错误", detail: message })}\n\n`);
+          res.write("data: [DONE]\n\n");
+          res.end();
+        } catch {
+          // ignore
+        }
       }
     }
-
-    res.write("data: [DONE]\n\n");
-    res.end();
   });
 
   app.post("/api/chat/stream", async (req, res) => {
-    res.status(200);
-    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
-    res.setHeader("Connection", "keep-alive");
-
-    for await (const evt of runChatStream(req.body)) {
-      if (evt.type === "delta") {
-        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: evt.delta } }] })}\n\n`);
-      } else if (evt.type === "error") {
-        res.write(`data: ${JSON.stringify({ error: evt.error, detail: evt.detail ?? "" })}\n\n`);
-        res.write("data: [DONE]\n\n");
-        res.end();
-        return;
-      } else if (evt.type === "done") {
-        res.write("data: [DONE]\n\n");
-        res.end();
-        return;
+    const log = createSseStreamLog("POST /api/chat/stream", chatStreamMeta(req.body));
+    req.on("close", () => {
+      log.clientDisconnected("incoming_message_close");
+    });
+    try {
+      res.status(200);
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      log.sseHeadersSet();
+      await pipeArkStreamToSse(res, runChatStream(req.body), log);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (!res.headersSent) {
+        log.streamEnd("handler_exception_before_headers", { detail: message });
+        res.status(500).json({ error: "服务器内部错误", detail: message });
+      } else {
+        log.streamEnd("handler_exception_after_headers", { detail: message });
+        try {
+          res.write(`data: ${JSON.stringify({ error: "服务器内部错误", detail: message })}\n\n`);
+          res.write("data: [DONE]\n\n");
+          res.end();
+        } catch {
+          // ignore
+        }
       }
     }
-
-    res.write("data: [DONE]\n\n");
-    res.end();
   });
 
   if (process.env.NODE_ENV !== "production") {

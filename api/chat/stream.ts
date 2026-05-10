@@ -4,6 +4,8 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { runChatStream } from "../../server/ark-api.js";
+import { pipeArkStreamToSse } from "../../server/pipe-ark-sse.js";
+import { chatStreamMeta, createSseStreamLog } from "../../server/sse-stream-log.js";
 
 export const config = {
   runtime: "nodejs",
@@ -11,39 +13,31 @@ export const config = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  try {
-    if (req.method !== "POST") {
-      res.status(405).json({ error: "Method Not Allowed" });
-      return;
-    }
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method Not Allowed" });
+    return;
+  }
 
+  const log = createSseStreamLog("POST /api/chat/stream", chatStreamMeta(req.body));
+  req.on("close", () => {
+    log.clientDisconnected("incoming_message_close");
+  });
+
+  try {
     res.status(200);
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
+    log.sseHeadersSet();
 
-    for await (const evt of runChatStream(req.body)) {
-      if (evt.type === "delta") {
-        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: evt.delta } }] })}\n\n`);
-      } else if (evt.type === "error") {
-        res.write(`data: ${JSON.stringify({ error: evt.error, detail: evt.detail ?? "" })}\n\n`);
-        res.write("data: [DONE]\n\n");
-        res.end();
-        return;
-      } else if (evt.type === "done") {
-        res.write("data: [DONE]\n\n");
-        res.end();
-        return;
-      }
-    }
-
-    res.write("data: [DONE]\n\n");
-    res.end();
+    await pipeArkStreamToSse(res, runChatStream(req.body), log);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     if (!res.headersSent) {
+      log.streamEnd("handler_exception_before_headers", { detail: message });
       res.status(500).json({ error: "服务器内部错误", detail: message });
     } else {
+      log.streamEnd("handler_exception_after_headers", { detail: message });
       try {
         res.write(`data: ${JSON.stringify({ error: "服务器内部错误", detail: message })}\n\n`);
         res.write("data: [DONE]\n\n");
@@ -54,4 +48,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
   }
 }
-
