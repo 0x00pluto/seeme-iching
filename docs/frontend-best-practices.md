@@ -2,7 +2,7 @@
 
 面向在 `seeme-iching` 仓库中协作的开发者与 AI 助手。协作入口见 [`docs/doc_index.md`](./doc_index.md)；本文档不重复其中的分流说明，只补充落地到代码的细则与 Do / Don't。每条实践都尽量给出本仓库的真实代码引用与反例。
 
-> 本仓库技术栈：React 19 + TypeScript + Vite 6 + Tailwind CSS v4 + Framer Motion + Sonner + Firebase Web SDK。**新增页面与独立新功能**的 UI 优先采用 **shadcn/ui**（见 [§3](#3-shadcnui新页面与新功能)）。AI 流式响应走同源 SSE 代理，状态在 Firestore 与 `localStorage` 之间降级。
+> 本仓库技术栈：React 19 + TypeScript + Vite 6 + Tailwind CSS v4 + Framer Motion + Sonner。**新增页面与独立新功能**的 UI 优先采用 **shadcn/ui**（见 [§3](#3-shadcnui新页面与新功能)）。AI 流式响应走同源 SSE 代理；观心档案与深度对话会话写入 **`localStorage`**（键前缀 `iching_*`）。
 
 ---
 
@@ -11,7 +11,7 @@
 - **新页面 / 新功能 UI**：优先 **shadcn/ui** primitive（详见 [§3](#3-shadcnui新页面与新功能)），与易经既有页面共存，逐步统一即可。
 - **KISS / YAGNI**：先用 `useState` + 状态机，超过 4 个独立页面再上 [`wouter`](../package.json)（已装未用）。
 - **DRY**：跨多处的逻辑抽到 `src/lib/*`；UI 中重复 3 次以上的结构抽组件；prompt、SSE 解析这种业务逻辑务必沉淀。
-- **单一职责**：`src/pages/Home.tsx` 是顶层状态机与登录/历史同步；`src/components/IChing/*` 只关心 UI；`src/lib/*` 只关心数据与协议。任何反向依赖（lib 引用 components）都视为代码异味。
+- **单一职责**：`src/pages/Home.tsx` 是顶层状态机与本地档案；`src/components/IChing/*` 只关心 UI；`src/lib/*` 只关心数据与协议。任何反向依赖（lib 引用 components）都视为代码异味。
 - **显式优于隐式**：组件 props、函数返回值都用 TypeScript 标注；不要靠 `any` / `as` 蒙混。
 - **代码即文档**：注释只写"为什么"，不写"是什么"；变量与函数名要能自解释。
 
@@ -24,7 +24,7 @@
 | [`src/pages/`](../src/pages/) | 顶层页面 / 状态机入口 | 不放纯展示组件 |
 | [`src/components/IChing/`](../src/components/IChing/) | 业务组件，按领域分组 | 不放与领域无关的通用 UI |
 | [`src/components/`](../src/components/) | 跨领域通用组件（如 [`ErrorBoundary`](../src/components/ErrorBoundary.tsx)） | 不直接耦合业务模型 |
-| [`src/lib/`](../src/lib/) | 协议 / 数据 / 工具：iching、firebase、ark-client、utils | 不依赖任何 React 组件 |
+| [`src/lib/`](../src/lib/) | 协议 / 数据 / 工具：iching、ark-client、utils | 不依赖任何 React 组件 |
 
 **Do**: 用路径别名 `@/*`，由 [`vite.config.ts`](../vite.config.ts) 与 `tsconfig.json` 同步声明，参见 [`vite.config.ts:13-17`](../vite.config.ts)。
 
@@ -144,7 +144,7 @@ server: {
 
 **Do**: 大于 4KB 的图片走 `import`，让 Vite 加 hash；小图标 inline 或放 `public/`。
 
-**Don't**: 把 `firebase-applet-config.json` 之类的"看似配置"放 `public/`——它已经在仓库根目录被 [`src/lib/firebase.ts:4`](../src/lib/firebase.ts) 直接 import，无需暴露给浏览器二次拉取。
+**Don't**：把含密钥或仅限服务端的配置塞进前端 bundle；敏感配置只走后端环境变量（见后端文档）。
 
 ### 4.5 构建产物与部署
 
@@ -175,7 +175,7 @@ server: {
 
 定时器示例见 [`src/components/IChing/Divination.tsx:16-37`](../src/components/IChing/Divination.tsx)：用 `useRef<NodeJS.Timeout | null>(null)` 持有 handle，并在停止 / 完成 / 卸载路径上 `clearInterval`。
 
-**Don't（隐患示例）**：在 `useEffect` 的回调里再嵌套一次订阅，把内层的取消函数从外层回调直接 `return`，那个 return 不会被 React 当作 cleanup 调用。本仓库 [`src/pages/Home.tsx:25-62`](../src/pages/Home.tsx) 的 `onAuthStateChanged → onSnapshot` 嵌套就属于这种结构——`return () => unsubHistory()` 看似清理，实际上只在某个分支返回，外层 useEffect 卸载时只会调用 `onAuthStateChanged` 自己的 unsubscribe。这种写法当前可工作，但需要改账号或多次切换登录态时会留下隐患，未来改造的方向是：**把 user 状态单独 useEffect 监听，把 history 订阅放到另一个依赖 user 的 useEffect**。
+**Don't（隐患示例）**：在 `useEffect` 的回调里再嵌套一次异步订阅，却只把内层 `unsubscribe` 写在某个分支的 `return` 里——外层卸载时可能泄漏。**Do**：一层 effect 对应一类订阅，`return` 统一解除。
 
 ### 5.3 状态管理策略
 
@@ -330,42 +330,22 @@ const normalizedInterpretation = useMemo(
 
 ---
 
-## 8. Firebase 客户端 SDK 边界
+## 8. 本地持久化（`localStorage`）
 
-### 8.1 配置不是密钥，安全靠 Rules
+观心档案与深度对话会话仅存浏览器本地，无服务端用户库。
 
-[`firebase-applet-config.json`](../firebase-applet-config.json) 是公开 ID（`apiKey` 字段是 Firebase 路由用的，不是鉴权密钥），可以提交仓库。**真正的安全靠 Firestore Security Rules**。任何前端直连方案都必须配 rules：
+### 8.1 键名与容量
 
-- `history/{docId}` 只允许 `request.auth.uid == resource.data.uid` 读写。
-- 未登录用户不能读他人记录，也不能批量列出。
+- **Do**：键名统一加前缀 `iching_*`（如 `iching_history`、`iching_deep_dialogue_<sessionId>`），避免与同域其他应用冲突。
+- **Don't**：写入体积过大的 JSON（多 MB 级）；`localStorage` 配额紧，大体量改 **IndexedDB**。
 
-**Do**: 在仓库 `firestore.rules`（如有）里维护规则；上线前用 Firebase 模拟器跑一遍。
+### 8.2 隐私与多端
 
-**Don't**: 把 `firebase-applet-config.json` 改名 `.env`、加 `.gitignore`——它本来就不是机密。这种"伪保密"反而会让协作者误以为安全已经做好。
+同一浏览器配置档内数据可见；**清除站点数据**或换设备不会同步。共用设备时提示用户注意隐私。
 
-### 8.2 实时订阅的清理
+### 8.3 写入失败
 
-`onSnapshot` 返回 unsubscribe 函数，必须在适当时机调用。当前 [`src/pages/Home.tsx:38-47`](../src/pages/Home.tsx) 的写法见 §5.2 "隐患示例"。建议演进方向：
-
-```tsx
-useEffect(() => {
-  const unsub = onAuthStateChanged(auth, setUser);
-  return unsub;
-}, []);
-
-useEffect(() => {
-  if (!user) return;
-  const q = query(/* ... */);
-  const unsub = onSnapshot(q, (snap) => setHistory(/* ... */));
-  return unsub;
-}, [user]);
-```
-
-**Don't**: 在登录态切换时不解绑前一个订阅。Firestore 计费按"活跃监听 × 时长"算，泄漏会直接体现在账单上。
-
-### 8.3 离线降级
-
-未登录时把数据存 `localStorage`（[`src/pages/Home.tsx:49-58, 75-79`](../src/pages/Home.tsx)）。**Do**: 把 key 命名加前缀 `iching_*`，避免与其他应用冲突。**Don't**: 写超过几 MB 的内容到 `localStorage`，配额很紧；大数据用 IndexedDB。
+`localStorage` 在隐私模式、配额满、禁用时可能抛错。**Do**：`try/catch` 后 `console.error`，不要让持久化失败阻断主流程（参见 [`src/components/IChing/DeepDialogue.tsx`](../src/components/IChing/DeepDialogue.tsx)）。
 
 ---
 
@@ -377,7 +357,7 @@ useEffect(() => {
 |------|------|------|
 | 渲染期 | [`ErrorBoundary`](../src/components/ErrorBoundary.tsx) | 组件抛出（罕见，多为 Bug） |
 | 业务 / 网络 | 局部 `error` state + Sonner toast | 接口失败、参数错误 |
-| Firestore | [`handleFirestoreError`](../src/lib/firebase.ts) | 写库失败的统一上报 |
+| 本地持久化 | `try/catch` + `console.error` | `localStorage` 写入失败（配额、禁用等） |
 
 ### 9.2 SSE 错误显示
 

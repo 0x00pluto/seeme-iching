@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageCircle, Send, Loader2, X, Sparkles, User, Bot, History } from "lucide-react";
+import { MessageCircle, Send, Loader2, X, Sparkles, User, Bot } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import { db, auth, handleFirestoreError, OperationType } from "@/lib/firebase";
-import { doc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
 import { cn } from "@/lib/utils";
+
+const DIALOGUE_STORAGE_PREFIX = "iching_deep_dialogue_";
 import { streamDeepChat } from "@/lib/ark-client";
 
 interface Message {
@@ -55,21 +55,19 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
     }
   }, [messages]);
 
-  const saveSession = async (newMessages: Message[], currentRound: number) => {
-    if (!auth.currentUser) return;
-    const path = `dialogues/${sessionId}`;
+  const saveSession = (newMessages: Message[], currentRound: number) => {
     try {
-      await setDoc(doc(db, path), {
+      const payload = {
         id: sessionId,
-        uid: auth.currentUser.uid,
         divinationId,
         messages: newMessages,
         round: currentRound,
         isComplete: currentRound >= 8,
-        timestamp: Date.now()
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, path);
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(`${DIALOGUE_STORAGE_PREFIX}${sessionId}`, JSON.stringify(payload));
+    } catch (e) {
+      console.error("Failed to persist dialogue session", e);
     }
   };
 
@@ -118,7 +116,10 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
         );
 
         const finalAssistant = assistantContent.trim() ? assistantContent : "我正在深思，请稍后再试。";
-        const finalMessages = [...newMessages, { role: "assistant", content: finalAssistant, timestamp: assistantTimestamp }];
+        const finalMessages: Message[] = [
+          ...newMessages,
+          { role: "assistant", content: finalAssistant, timestamp: assistantTimestamp },
+        ];
         setMessages(finalMessages);
 
         const nextRound = round + 1;

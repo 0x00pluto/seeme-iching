@@ -2,7 +2,7 @@
 
 面向 `seeme-iching` 仓库中协作的开发者与 AI 助手。协作入口见 [`docs/doc_index.md`](./doc_index.md)；本文档不重复其中的分流说明，只补落地细节、Do / Don't 与可观测性、限流等前瞻实践。每条都尽量给本仓库的真实代码引用与反例。
 
-> 本仓库后端的定位极简：**AI 转发 + SSE 流式**，业务状态在 Firebase（前端直连），所以"后端"就是 4 个端点 + 1 个共享模块。  
+> 本仓库后端的定位极简：**AI 转发 + SSE 流式**；占卦档案等在前端 **localStorage**，不经由本后端持久化。  
 > 双运行时：本地 / 自托管走 Express（[`server.ts`](../server.ts)），Vercel 部署走 Serverless Functions（[`api/`](../api/)），共享 [`server/ark-api.ts`](../server/ark-api.ts) 业务逻辑。
 
 ---

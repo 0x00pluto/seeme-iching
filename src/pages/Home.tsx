@@ -5,11 +5,10 @@ import { Interpretation } from "@/components/IChing/Interpretation";
 import { History, HistoryItem } from "@/components/IChing/History";
 import { LineType } from "@/lib/iching";
 import { cn } from "@/lib/utils";
-import { Sparkles, ChevronRight, History as HistoryIcon, User, LogIn, LogOut, BookOpen, MessageCircle, Share2, Compass, Eye, Heart, Ghost, Trash2, ArrowLeft } from "lucide-react";
+import { Sparkles, ChevronRight, History as HistoryIcon, Trash2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { auth, db, loginWithGoogle, logout, handleFirestoreError, OperationType } from "@/lib/firebase";
-import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { collection, query, where, onSnapshot, doc, setDoc, deleteDoc, orderBy } from "firebase/firestore";
+
+const HISTORY_STORAGE_KEY = "iching_history";
 
 type AppState = "landing" | "divination" | "interpretation" | "history";
 
@@ -18,104 +17,28 @@ export const Home: React.FC = () => {
   const [lines, setLines] = useState<LineType[]>([]);
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
   const canStartDivination = question.trim().length > 0;
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setIsAuthReady(true);
-      
-      if (currentUser) {
-        // Sync history from Firestore
-        const q = query(
-          collection(db, "history"), 
-          where("uid", "==", currentUser.uid),
-          orderBy("timestamp", "desc")
-        );
-        
-        const unsubHistory = onSnapshot(q, (snapshot) => {
-          const items = snapshot.docs.map(doc => doc.data() as HistoryItem);
-          setHistory(items);
-        }, (error) => {
-          console.error("History sync error:", error);
-          // Don't throw here to avoid crashing the landing page
-          // handleFirestoreError(error, OperationType.LIST, "history");
-        });
-
-        return () => unsubHistory();
-      } else {
-        // Load from local storage if not logged in
-        const savedHistory = localStorage.getItem("iching_history");
-        if (savedHistory) {
-          try {
-            setHistory(JSON.parse(savedHistory));
-          } catch (e) {
-            console.error("Failed to load local history", e);
-          }
-        }
-      }
-    });
-
-    return () => unsubscribe();
+    const savedHistory = localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!savedHistory) return;
+    try {
+      setHistory(JSON.parse(savedHistory));
+    } catch (e) {
+      console.error("Failed to load local history", e);
+    }
   }, []);
 
   const saveToHistory = async (item: HistoryItem) => {
-    if (user) {
-      const path = `history/${item.id}`;
-      try {
-        await setDoc(doc(db, path), {
-          ...item,
-          uid: user.uid
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, path);
-      }
-    } else {
-      const newHistory = [item, ...history];
-      setHistory(newHistory);
-      localStorage.setItem("iching_history", JSON.stringify(newHistory));
-      toast.info("已保存至本地（登录后可同步至云端）");
-    }
+    const newHistory = [item, ...history];
+    setHistory(newHistory);
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(newHistory));
   };
 
   const clearHistory = async () => {
-    if (user) {
-      toast.promise(async () => {
-        // In a real app, we'd batch delete. For now, we'll just clear local state if needed
-        // but Firestore rules prevent mass delete without specific IDs.
-        // We'll just show a message that mass delete is restricted for safety.
-        toast.error("为了安全，暂不支持批量删除云端档案");
-      }, {
-        loading: "正在处理...",
-        success: "操作完成",
-        error: "操作失败"
-      });
-    } else {
-      setHistory([]);
-      localStorage.removeItem("iching_history");
-      toast.success("本地档案已清空");
-    }
-  };
-
-  const handleLogin = async () => {
-    try {
-      await loginWithGoogle();
-      toast.success("登录成功");
-    } catch (error) {
-      toast.error("登录失败，请重试");
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      toast.success("已退出登录");
-      setState("landing");
-    } catch (error) {
-      toast.error("退出失败");
-    }
+    setHistory([]);
+    localStorage.removeItem(HISTORY_STORAGE_KEY);
+    toast.success("本地档案已清空");
   };
 
   const handleComplete = (newLines: LineType[]) => {
@@ -170,40 +93,6 @@ export const Home: React.FC = () => {
             <HistoryIcon size={14} />
             <span>档案</span>
           </button>
-          
-          {user ? (
-            <div className="flex items-center gap-4">
-              <div className="flex flex-col items-end">
-                <span className="text-[10px] text-ink/80 font-serif font-bold tracking-wider">{user.displayName}</span>
-                <button 
-                  onClick={handleLogout}
-                  className="text-[8px] text-ink/30 hover:text-accent font-serif uppercase tracking-widest transition-colors"
-                >
-                  退出登录
-                </button>
-              </div>
-              {user.photoURL ? (
-                <img 
-                  src={user.photoURL} 
-                  alt={user.displayName || ""} 
-                  referrerPolicy="no-referrer"
-                  className="w-8 h-8 rounded-full border border-ink/10"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-ink/5 flex items-center justify-center text-ink/30">
-                  <User size={14} />
-                </div>
-              )}
-            </div>
-          ) : (
-            <button 
-              onClick={handleLogin}
-              className="px-5 py-2 rounded-full border border-ink/10 text-xs text-ink/60 hover:bg-ink/5 transition-colors font-serif tracking-widest uppercase flex items-center gap-2"
-            >
-              <LogIn size={14} />
-              <span>登录</span>
-            </button>
-          )}
         </nav>
       </header>
 

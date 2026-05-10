@@ -8,11 +8,11 @@
 
 ## 产品一句话
 
-**镜微 · 易经 AI 内省**（`seeme-iching`）：基于六十四卦意象的 AI 心理内省；原则：**不预言命运，只映照叙事**。云端档案依赖 Firebase（认证 + Firestore）。
+**镜微 · 易经 AI 内省**（`seeme-iching`）：基于六十四卦意象的 AI 心理内省；原则：**不预言命运，只映照叙事**。观心档案保存在浏览器本地（`localStorage`）。
 
 ## 技术画像（极简）
 
-- **栈**：React、TypeScript、Vite、Tailwind；本地 **Express**（`server.ts`）与 **Vercel** `api/*` 共用 [`server/ark-api.ts`](server/ark-api.ts)；AI 为火山方舟 OpenAI 兼容端；客户端 Firebase。
+- **栈**：React、TypeScript、Vite、Tailwind；本地 **Express**（`server.ts`）与 **Vercel** `api/*` 共用 [`server/ark-api.ts`](server/ark-api.ts)；AI 为火山方舟 OpenAI 兼容端。
 - **包管理**：**pnpm**（以 `pnpm-lock.yaml` 为准）。
 
 ## 常用命令
@@ -28,7 +28,7 @@
 | AI 行为、interpret/chat、密钥侧逻辑 | [`server/ark-api.ts`](server/ark-api.ts) |
 | 本地 HTTP 与静态资源 | [`server.ts`](server.ts) |
 | 托管平台无服务器路由 | [`api/`](api/) |
-| 前端主流程与登录/历史 | [`src/pages/Home.tsx`](src/pages/Home.tsx) |
+| 前端主流程与本地档案 | [`src/pages/Home.tsx`](src/pages/Home.tsx) |
 | 卦象与算法 | [`src/lib/iching.ts`](src/lib/iching.ts) |
 | 业务 UI 组件 | [`src/components/IChing/`](src/components/IChing/) |
 

@@ -34,9 +34,8 @@
 - **映照与深挖**：用卦象故事引出问题，帮助用户看见自己的叙事框架，挑战绝对化表述。
 - **克制与悬置**：AI 只问问题，不给答案，不做评价。在第 8 轮时进行总结并给出充满希望的结语，引导用户自我觉察。
 
-### 4. 认知档案 (云端同步)
-- 基于 Firebase 构建的用户系统与云端数据库。
-- 用户的每一次占卜记录、自我觉察笔记以及深度对话历史，都会被安全地保存在云端，随时可以回顾。
+### 4. 认知档案 (本地)
+- 占卦记录保存在浏览器 **localStorage**（键前缀 `iching_*`），同一浏览器内可回顾；清除站点数据或换设备不会同步。
 
 ---
 
@@ -53,7 +52,7 @@
 | **UI 组件** | Lucide React（图标）+ React Markdown + Sonner（Toast） |
 | **本地后端** | Node.js + Express（[`server.ts`](server.ts)：开发态挂载 Vite 中间件，生产态托管 `dist`） |
 | **线上 API（如 Vercel）** | 根目录 [`api/`](api/) 无服务器函数，与 Express **共用** [`server/ark-api.ts`](server/ark-api.ts) 中的方舟调用逻辑 |
-| **数据库与认证** | Firebase（Firestore + Google Auth） |
+| **客户端持久化** | `localStorage`（档案与深度对话会话） |
 | **AI 大模型** | 火山方舟 **Coding Plan**（OpenAI 兼容 SDK，默认 `api/coding/v3` + `ark-code-latest`；见 [`.env.example`](.env.example)） |
 
 ### 核心项目结构
@@ -69,7 +68,6 @@
 ├── vercel.json               # 可选：SPA 回退、函数 maxDuration 等（部署于 Vercel 时使用）
 ├── public/
 │   └── favicon.svg           # 站点图标（镜字圆标）
-├── firebase-applet-config.json   # Firebase 前端配置（被 src/lib/firebase.ts 引用）
 ├── index.html
 ├── src/
 │   ├── components/
@@ -77,7 +75,6 @@
 │   │   └── IChing/           # Divination、Hexagram、Interpretation、DeepDialogue、History
 │   ├── lib/
 │   │   ├── iching.ts         # 六十四卦数据与起卦/变卦逻辑
-│   │   ├── firebase.ts       # Firebase 初始化与封装
 │   │   └── utils.ts          # 工具函数（如 cn）
 │   ├── pages/Home.tsx        # 主流程状态机（landing / divination / interpretation / history）
 │   ├── App.tsx               # ErrorBoundary、Toaster、Home
@@ -89,7 +86,10 @@
 路径别名：`@/*` → `src/*`。
 
 ### 安全设计
-- **API 密钥（当前实现）**：使用 **同源流式代理**，`ARK_API_KEY` 仅存在于服务端（本机 `.env` 或托管平台环境变量）。前端不直连方舟域名，从而避免 CORS 与浏览器暴露 key。\n+  - 前端使用：`POST /api/interpret/stream`、`POST /api/chat/stream`（SSE 流式返回）。\n+  - 注意：若把该代理部署在 Vercel 等 serverless 上，仍可能受 `maxDuration`（例如 60s）限制，连接到点会被掐断。\n+- **Firestore**：建议配置安全规则，确保用户只能读写自己的 `history` 等数据。
+- **API 密钥（当前实现）**：使用 **同源流式代理**，`ARK_API_KEY` 仅存在于服务端（本机 `.env` 或托管平台环境变量）。前端不直连方舟域名，从而避免 CORS 与浏览器暴露 key。
+  - 前端使用：`POST /api/interpret/stream`、`POST /api/chat/stream`（SSE 流式返回）。
+  - 注意：若把该代理部署在 Vercel 等 serverless 上，仍可能受 `maxDuration`（例如 60s）限制，连接可能被掐断。
+- **本地档案**：`localStorage` 仅在用户本机可见；共用设备时注意隐私与清除浏览器数据的影响。
 
 ---
 
@@ -98,7 +98,6 @@
 ### 环境要求
 - Node.js 18+
 - [pnpm](https://pnpm.io/)（推荐；仓库以 `pnpm-lock.yaml` 为准）
-- Firebase 项目（需开启 Firestore 和 Google Auth）
 - 火山方舟 API Key（服务端：`ARK_API_KEY`，可选覆盖 `ARK_BASE_URL` / `ARK_MODEL`，见 `.env.example`）
 
 ### 快速启动
@@ -111,16 +110,13 @@
 2. **配置环境变量**  
    在根目录创建 `.env`，至少填写 `ARK_API_KEY`（参见 `.env.example`）。
 
-3. **配置 Firebase**  
-   将控制台配置写入仓库根目录的 **`firebase-applet-config.json`**（与 `src/lib/firebase.ts` 中的引用路径一致）。
-
-4. **启动全栈开发服务器**
+3. **启动全栈开发服务器**
    ```bash
    pnpm run dev
    ```
    会启动 Express（`/api/*`）与 Vite 前端热更新，默认 **http://localhost:3000**。
 
-5. **访问应用**  
+4. **访问应用**  
    浏览器打开 `http://localhost:3000`。
 
 ---
