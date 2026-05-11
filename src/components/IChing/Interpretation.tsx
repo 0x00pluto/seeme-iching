@@ -29,6 +29,26 @@ const FALLBACK_DEEP_INQUIRY: [string, string, string] = [
   "如果不急着做决定，我现在最需要承认什么？",
 ];
 
+const THINKING_HINTS = [
+  "镜面起雾，卦象正在成形…",
+  "取象未毕，先让心静一息…",
+  "四镜对照之中，答案正在显影…",
+] as const;
+
+/** 主解读加载态下，一句文案展示时长（一次「呼吸」） */
+const BREATH_MS = 4000;
+
+function SeemingSpinnerGlyph() {
+  return (
+    <div className="relative" aria-busy={true} aria-live="polite">
+      <Loader2 className="animate-spin text-brand" size={48} aria-hidden />
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <span className="h-3 w-3 animate-ping rounded-full bg-brand opacity-60" />
+      </div>
+    </div>
+  );
+}
+
 function normalizeMarkdownTables(markdown: string): string {
   if (!markdown.includes("|")) return markdown;
 
@@ -87,12 +107,8 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
   const [readingSessionId] = useState(() => `reading_${Date.now()}`);
   const abortRef = useRef<AbortController | null>(null);
   const deepInquiryAbortRef = useRef<AbortController | null>(null);
-  const [thinkingHint, setThinkingHint] = useState<string>("正在取象、观心、通变...");
-  const THINKING_HINTS = [
-    "镜面起雾，卦象正在成形…",
-    "取象未毕，先让心静一息…",
-    "四镜对照之中，答案正在显影…",
-  ];
+  const [hintOffset, setHintOffset] = useState(0);
+  const [hintStep, setHintStep] = useState(0);
 
   const benLines = lines;
   const huLines = getHuGuaLines(lines);
@@ -116,7 +132,8 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
       setDeepInquiryQuestions(null);
       setDeepInquiryLoading(false);
       deepInquiryAbortRef.current?.abort();
-      setThinkingHint(THINKING_HINTS[Math.floor(Math.random() * THINKING_HINTS.length)] ?? "正在取象、观心、通变...");
+      setHintOffset(Math.floor(Math.random() * THINKING_HINTS.length));
+      setHintStep(0);
       try {
         let receivedAny = false;
         await streamInterpret(
@@ -157,6 +174,14 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
       abortRef.current?.abort();
     };
   }, [lines, question, benGua, huGua, cuoGua, zongGua]);
+
+  useEffect(() => {
+    if (!isLoading || interpretation.trim() !== "") return;
+    const id = window.setInterval(() => {
+      setHintStep((s) => s + 1);
+    }, BREATH_MS);
+    return () => clearInterval(id);
+  }, [isLoading, interpretation]);
 
   useEffect(() => {
     if (isLoading || error) return;
@@ -320,14 +345,20 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
               </div>
             ) : isLoading ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-6 py-12 text-center">
-                <div className="relative" aria-busy="true" aria-live="polite">
-                  <Loader2 className="animate-spin text-brand" size={48} aria-hidden />
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className="h-3 w-3 animate-ping rounded-full bg-brand opacity-60" />
-                  </div>
-                </div>
-                <div className="max-w-md animate-pulse px-4 text-sm font-serif tracking-widest text-ink/45 italic">
-                  {thinkingHint}
+                <SeemingSpinnerGlyph />
+                <div className="relative flex min-h-[1.75rem] w-full justify-center">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={`${hintOffset}-${hintStep}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.45, ease: "easeInOut" }}
+                      className="max-w-md px-4 text-sm font-serif tracking-widest text-ink/45 italic"
+                    >
+                      {THINKING_HINTS[(hintOffset + hintStep) % THINKING_HINTS.length]}
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
               </div>
             ) : (
@@ -347,14 +378,17 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
               </h4>
             </div>
             {deepInquiryLoading || deepInquiryQuestions === null ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="h-28 animate-pulse rounded-[40px] border border-ink/5 bg-white/40 p-8"
-                    aria-hidden
-                  />
-                ))}
+              <div className="flex w-full flex-col items-center gap-8">
+                <SeemingSpinnerGlyph />
+                <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-3">
+                  {[0, 1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="h-28 animate-pulse rounded-[40px] border border-ink/5 bg-white/40 p-8"
+                      aria-hidden
+                    />
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

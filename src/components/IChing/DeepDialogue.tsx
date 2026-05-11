@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { MessageCircle, Send, Loader2, X, Sparkles, User, Bot } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
@@ -88,6 +88,19 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({
     }
   }, [messages]);
 
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtml = html.style.overflow;
+    const prevBody = body.style.overflow;
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prevHtml;
+      body.style.overflow = prevBody;
+    };
+  }, []);
+
   const handleSend = async () => {
     if (!input.trim() || isLoading || round > 8) return;
 
@@ -151,10 +164,19 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({
           error instanceof Error && error.message !== "API request failed"
             ? error.message
             : fallback;
-        setMessages(prev => [...prev, { role: "assistant", content, timestamp: Date.now() }]);
+        setMessages((prev) => {
+          const lastIdx = prev.length - 1;
+          const last = prev[lastIdx];
+          if (last?.role === "assistant" && !last.content.trim()) {
+            const next = [...prev];
+            next[lastIdx] = { ...last, content };
+            return next;
+          }
+          return [...prev, { role: "assistant", content, timestamp: Date.now() }];
+        });
       } finally {
-      setIsLoading(false);
-    }
+        setIsLoading(false);
+      }
   };
 
   useEffect(() => {
@@ -168,7 +190,7 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center overscroll-none p-4 md:p-8 bg-black/40 backdrop-blur-sm"
     >
       <div className="w-full max-w-4xl h-[85vh] bg-bg rounded-[48px] border border-ink/10 shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
@@ -230,25 +252,19 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({
                   ? "bg-brand/5 text-ink border border-brand/10 rounded-tr-none" 
                   : "bg-white border border-ink/5 rounded-tl-none"
               )}>
-                <div className="prose prose-sm prose-ink max-w-none">
-                  <ReactMarkdown>
-                    {msg.content}
-                  </ReactMarkdown>
-                </div>
+                {msg.role === "assistant" && !msg.content.trim() ? (
+                  <div className="flex items-center gap-3 text-ink/30">
+                    <Loader2 size={16} className="animate-spin text-brand shrink-0" />
+                    <span className="text-sm font-serif italic">正在深思...</span>
+                  </div>
+                ) : (
+                  <div className="prose prose-sm prose-ink max-w-none">
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  </div>
+                )}
               </div>
             </motion.div>
           ))}
-          {isLoading && (
-            <div className="flex gap-4 self-start">
-              <div className="w-8 h-8 rounded-full bg-ink flex items-center justify-center text-bg">
-                <Bot size={14} />
-              </div>
-              <div className="p-6 rounded-[32px] bg-white border border-ink/5 rounded-tl-none flex items-center gap-3">
-                <Loader2 size={16} className="animate-spin text-brand" />
-                <span className="text-sm font-serif italic text-ink/30">正在深思...</span>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Input Area */}
