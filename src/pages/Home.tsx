@@ -290,21 +290,23 @@ export const Home: React.FC = () => {
             <div className="text-[10px] text-ink/30 font-serif uppercase tracking-widest">© 2026 镜微易经 · 探索内心的无限可能</div>
           </div>
           
-          <div className="flex gap-12">
-            <div className="flex flex-col gap-3">
-              <div className="text-[10px] text-ink/30 font-serif uppercase tracking-widest">关于</div>
-              <nav className="flex flex-col gap-1">
-                <a href="#" className="text-xs text-ink/50 hover:text-ink font-serif transition-colors">产品理念</a>
-                <a href="#" className="text-xs text-ink/50 hover:text-ink font-serif transition-colors">方法论</a>
-              </nav>
-            </div>
-            <div className="flex flex-col gap-3">
-              <div className="text-[10px] text-ink/30 font-serif uppercase tracking-widest">支持</div>
-              <nav className="flex flex-col gap-1">
-                <a href="#" className="text-xs text-ink/50 hover:text-ink font-serif transition-colors">使用指南</a>
-                <a href="#" className="text-xs text-ink/50 hover:text-ink font-serif transition-colors">常见问题</a>
-              </nav>
-            </div>
+          <div className="flex flex-wrap justify-end gap-x-10 gap-y-6 sm:gap-x-14">
+            <nav className="flex flex-col gap-2">
+              <a href="#" className="text-xs text-ink/50 hover:text-ink font-serif transition-colors">
+                用户协议
+              </a>
+              <a href="#" className="text-xs text-ink/50 hover:text-ink font-serif transition-colors">
+                隐私政策
+              </a>
+            </nav>
+            <nav className="flex flex-col gap-2">
+              <a href="#" className="text-xs text-ink/50 hover:text-ink font-serif transition-colors">
+                使用指南
+              </a>
+              <a href="#" className="text-xs text-ink/50 hover:text-ink font-serif transition-colors">
+                常见问题
+              </a>
+            </nav>
           </div>
         </div>
       </footer>

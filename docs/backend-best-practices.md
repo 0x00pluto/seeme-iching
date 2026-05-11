@@ -12,12 +12,12 @@
 ```
 src (浏览器)
   │
-  └─ POST /api/{interpret,chat}{,/stream}
+  └─ POST /api/{interpret,interpret/deep-inquiry,chat}{,/stream}
        │
        ├─ 本地  -> server.ts (Express)
-       │              └─ runInterpretApi / runChatApi / runInterpretStream / runChatStream
+       │              └─ runInterpretApi / runDeepInquiryApi / runChatApi / runInterpretStream / runChatStream
        │
-       └─ Vercel -> api/interpret.ts | api/chat.ts | api/{interpret,chat}/stream.ts
+       └─ Vercel -> api/interpret.ts | api/interpret/deep-inquiry.ts | api/chat.ts | api/{interpret,chat}/stream.ts
                        └─ 调同一组 server/ark-api.ts 函数
                                 │
                                 └─ 火山方舟（OpenAI 兼容） https://ark.cn-beijing.volces.com/api/coding/v3
@@ -38,15 +38,16 @@ src (浏览器)
 [`server/ark-api.ts`](../server/ark-api.ts) 暴露的 4 个核心函数被 2 个运行时共用：
 
 ```ts
-runInterpretApi(body)      // 同步 JSON
-runChatApi(body)           // 同步 JSON
-runInterpretStream(body)   // AsyncGenerator，逐 token yield
-runChatStream(body)        // AsyncGenerator，逐 token yield
+runInterpretApi(body)       // 同步 JSON：观心报告
+runDeepInquiryApi(body)     // 同步 JSON：基于报告的三条深入问句
+runChatApi(body)            // 同步 JSON
+runInterpretStream(body)    // AsyncGenerator，逐 token yield
+runChatStream(body)         // AsyncGenerator，逐 token yield
 ```
 
-Express 端的接入：[`server.ts:15-73`](../server.ts)；Vercel Functions 端的接入：[`api/interpret.ts`](../api/interpret.ts)、[`api/chat.ts`](../api/chat.ts)。
+Express 端的接入：[`server.ts`](../server.ts)（含 `/api/interpret/deep-inquiry`）；Vercel Functions 端的接入：[`api/interpret.ts`](../api/interpret.ts)、[`api/interpret/deep-inquiry.ts`](../api/interpret/deep-inquiry.ts)、[`api/chat.ts`](../api/chat.ts)。
 
-**Do**: 任何"业务规则改动"（Prompt、错误归类、模型选择）都改 `server/ark-api.ts`，**两个运行时自动同步**。
+**Do**: 方舟调用编排、错误归类、流式解析与 JSON 校验改 [`server/ark-api.ts`](../server/ark-api.ts)；**可维护的长 Prompt 模板**改 [`server/prompts/`](../server/prompts/)，由 `ark-api` 引用。**两个运行时自动同步**。
 
 **Don't**: 在 [`api/chat.ts:18`](../api/chat.ts) 里加私货逻辑（"只在 Vercel 多做一步 X"）。两套代码很快会漂移，长期一定踩坑。
 
@@ -80,6 +81,7 @@ Vercel 把 `api/*` 下的 ts 文件按**路径**映射成 HTTP 端点：
 - [`api/interpret.ts`](../api/interpret.ts) → `POST /api/interpret`
 - [`api/chat.ts`](../api/chat.ts) → `POST /api/chat`
 - [`api/interpret/stream.ts`](../api/interpret/stream.ts) → `POST /api/interpret/stream`
+- [`api/interpret/deep-inquiry.ts`](../api/interpret/deep-inquiry.ts) → `POST /api/interpret/deep-inquiry`
 - [`api/chat/stream.ts`](../api/chat/stream.ts) → `POST /api/chat/stream`
 
 **Do**: 需要加 `/api/foo/bar` 时，**一定**新建 `api/foo/bar.ts`。
@@ -212,12 +214,13 @@ export const ARK_MODEL_DEFAULT = "ark-code-latest";
 
 ### 5.3 Prompt 集中
 
-四个 prompt 构造函数都在 [`server/ark-api.ts:74-120`](../server/ark-api.ts)：
+观心报告、深入三问、深度对话的 **用户/ system 文案** 已拆到 [`server/prompts/`](../server/prompts/)，由 [`server/ark-api.ts`](../server/ark-api.ts) 引用：
 
-- `buildInterpretUserPrompt(question, benGua, huGua, cuoGua, zongGua)`
-- `buildChatSystemInstruction(question, interpretation, round)`
+- [`server/prompts/interpret-report.ts`](../server/prompts/interpret-report.ts) — `buildInterpretReportUserPrompt(...)`
+- [`server/prompts/deep-inquiry.ts`](../server/prompts/deep-inquiry.ts) — `buildDeepInquiryUserPrompt(...)`（JSON 契约说明同文件）
+- [`server/prompts/chat-dialogue.ts`](../server/prompts/chat-dialogue.ts) — `buildChatSystemInstruction(question, interpretation, round, direction?)`
 
-**Do**: 改 AI 行为只改这两个函数。前端只传业务字段，不能拼任何 prompt 文本。
+**Do**: 迭代 Pro prompt 优先改 `server/prompts/*`；`ark-api.ts` 只负责组装请求与解析响应。前端只传业务字段，不能拼任何 prompt 文本。
 
 **Don't**: 把"礼貌用语 / 格式要求 / 不得算命"这种规则散到 [`api/chat.ts`](../api/chat.ts) 或前端。一旦散落，A/B 实验、风格调优都失控。
 

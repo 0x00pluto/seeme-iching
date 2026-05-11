@@ -1,10 +1,10 @@
-import { streamInterpret } from "@/lib/ark-client";
+import { fetchDeepInquiry, streamInterpret } from "@/lib/ark-client";
 import { HEXAGRAMS, LineType, getBinary, getCuoGuaLines, getHuGuaLines, getZongGuaLines } from "@/lib/iching";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AnimatePresence, motion } from "framer-motion";
-import { BookOpen, Compass, Eye, Ghost, Heart, Loader2, MessageCircle, Share2 } from "lucide-react";
+import { BookOpen, Compass, Eye, Ghost, Heart, Loader2, Share2 } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -19,10 +19,19 @@ interface InterpretationProps {
 
 const TABLE_SEPARATOR_REGEX = /\|(?:\s*:?-{3,}:?\s*\|)+/g;
 
+const SELF_OBSERVATION_QUOTE =
+  "照见不是为了判定对错，而是为了在叙事里多一个温柔的停顿；当你写下觉察时，故事便有了可以改写的一笔。";
+
+/** API 失败或未配置时的兜底，与 newjingwei 稿面对齐 */
+const FALLBACK_DEEP_INQUIRY: [string, string, string] = [
+  "这件事真正触动我的是什么？",
+  "我是不是又回到了某个熟悉的模式？",
+  "如果不急着做决定，我现在最需要承认什么？",
+];
+
 function normalizeMarkdownTables(markdown: string): string {
   if (!markdown.includes("|")) return markdown;
 
-  // Streaming output occasionally merges table rows into one line, so we split obvious row boundaries.
   let normalized = markdown.replace(/\r\n/g, "\n").replace(/\|\s+\|/g, "|\n|");
 
   normalized = normalized.replace(/([^\n])(\|(?:\s*:?-{3,}:?\s*\|)+)/g, "$1\n$2");
@@ -72,7 +81,12 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
   const [error, setError] = useState<string | null>(null);
   const [reflection, setReflection] = useState("");
   const [showDialogue, setShowDialogue] = useState(false);
+  const [selectedDirection, setSelectedDirection] = useState<string | null>(null);
+  const [deepInquiryQuestions, setDeepInquiryQuestions] = useState<string[] | null>(null);
+  const [deepInquiryLoading, setDeepInquiryLoading] = useState(false);
+  const [readingSessionId] = useState(() => `reading_${Date.now()}`);
   const abortRef = useRef<AbortController | null>(null);
+  const deepInquiryAbortRef = useRef<AbortController | null>(null);
   const [thinkingHint, setThinkingHint] = useState<string>("正在取象、观心、通变...");
   const THINKING_HINTS = [
     "镜面起雾，卦象正在成形…",
@@ -80,7 +94,6 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
     "四镜对照之中，答案正在显影…",
   ];
 
-  // Derive the 4 mirrors
   const benLines = lines;
   const huLines = getHuGuaLines(lines);
   const cuoLines = getCuoGuaLines(lines);
@@ -100,6 +113,9 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
       setIsLoading(true);
       setError(null);
       setInterpretation("");
+      setDeepInquiryQuestions(null);
+      setDeepInquiryLoading(false);
+      deepInquiryAbortRef.current?.abort();
       setThinkingHint(THINKING_HINTS[Math.floor(Math.random() * THINKING_HINTS.length)] ?? "正在取象、观心、通变...");
       try {
         let receivedAny = false;
@@ -132,7 +148,6 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
             : "AI 解读生成失败，请检查网络或 API 配置。";
         setError(hint);
       } finally {
-        /** 被取消的请求也会走 finally；若在此处 setLoading(false)，会在 StrictMode/重跑 effect 时把 loading 误判为结束并闪出「暂无可呈现」。 */
         if (!controller.signal.aborted) setIsLoading(false);
       }
     };
@@ -143,6 +158,50 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
     };
   }, [lines, question, benGua, huGua, cuoGua, zongGua]);
 
+  useEffect(() => {
+    if (isLoading || error) return;
+    const text = interpretation.trim();
+    if (!text || text.startsWith("未能生成解读")) return;
+
+    deepInquiryAbortRef.current?.abort();
+    const controller = new AbortController();
+    deepInquiryAbortRef.current = controller;
+
+    setDeepInquiryLoading(true);
+    void (async () => {
+      try {
+        const { deepInquiry } = await fetchDeepInquiry(
+          {
+            question,
+            interpretation: text,
+            benGua,
+            huGua,
+            cuoGua,
+            zongGua,
+          },
+          { signal: controller.signal }
+        );
+        if (!controller.signal.aborted) {
+          setDeepInquiryQuestions([...deepInquiry]);
+        }
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return;
+        console.error("Deep inquiry fetch failed:", e);
+        if (!controller.signal.aborted) {
+          setDeepInquiryQuestions([...FALLBACK_DEEP_INQUIRY]);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setDeepInquiryLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      controller.abort();
+    };
+  }, [isLoading, error, interpretation, question, benGua, huGua, cuoGua, zongGua]);
+
   const mirrors = [
     { title: "现状之镜", gua: benGua, lines: benLines, icon: Eye, color: "text-ink" },
     { title: "内心之镜", gua: huGua, lines: huLines, icon: Heart, color: "text-brand" },
@@ -150,49 +209,75 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
     { title: "视角之镜", gua: zongGua, lines: zongLines, icon: Compass, color: "text-emerald-600" },
   ];
   const normalizedInterpretation = useMemo(() => normalizeMarkdownTables(interpretation), [interpretation]);
+  const showReportHeader = interpretation.trim().length > 0;
+  /** 解读流已结束且为有效正文：再展示 DEEP INQUIRY 与自我觉察（与流式中的占位区分） */
+  const reportReadyForFollowUp =
+    !isLoading &&
+    !error &&
+    interpretation.trim().length > 0 &&
+    !interpretation.trim().startsWith("未能生成解读");
+
+  const handleShare = () => {
+    const shareUrl = process.env.APP_URL || window.location.origin;
+    const shareText = `我在镜微易经获得了一份观心报告：${benGua?.name}卦。针对我的困惑：“${question}”，这里照见的是叙事与感受，而非断言。`;
+    if (navigator.share) {
+      navigator
+        .share({
+          title: "镜微易经 · 观心报告",
+          text: shareText,
+          url: shareUrl,
+        })
+        .catch(console.error);
+    } else {
+      void navigator.clipboard.writeText(`${shareText}\n查看更多：${shareUrl}`);
+      alert("链接已复制到剪贴板");
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto py-10 px-6 sm:px-8 flex flex-col gap-10">
       <AnimatePresence>
         {showDialogue && (
-          <DeepDialogue 
-            divinationId={Date.now().toString()} 
-            question={question || "未提供具体问题"} 
+          <DeepDialogue
+            key={`${readingSessionId}-${selectedDirection ?? "open"}`}
+            divinationId={readingSessionId}
+            question={question || "未提供具体问题"}
             interpretation={interpretation}
-            onClose={() => setShowDialogue(false)}
+            direction={selectedDirection ?? undefined}
+            onClose={() => {
+              setShowDialogue(false);
+              setSelectedDirection(null);
+            }}
           />
         )}
       </AnimatePresence>
 
-      {/* Bento Grid Mirrors */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-5">
         {mirrors.map((mirror, i) => (
           <motion.div
             key={mirror.title}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
-            className="group relative p-7 sm:p-8 border border-ink/5 rounded-[36px] bg-white/40 backdrop-blur-md hover:bg-white/60 hover:border-brand/20 transition-all shadow-sm hover:shadow-xl"
+            className="group relative rounded-[26px] border border-ink/8 bg-white/50 p-6 shadow-md backdrop-blur-md transition-all hover:border-brand/20 hover:bg-white/70 hover:shadow-lg sm:p-7"
           >
-            <div className="flex items-center justify-between mb-8">
-              <div className={cn("p-3 rounded-2xl bg-bg border border-ink/5 shadow-inner", mirror.color)}>
+            <div className="mb-6 flex items-center justify-between">
+              <div className={cn("rounded-xl border border-ink/5 bg-bg p-2.5 shadow-inner", mirror.color)}>
                 <mirror.icon size={20} />
               </div>
-              <div className="text-[10px] font-medium tracking-[0.35em] text-ink/25">
-                MIRROR {i + 1}
-              </div>
+              <div className="text-[10px] font-medium tracking-[0.3em] text-ink/25">MIRROR {i + 1}</div>
             </div>
-            
-            <div className="flex flex-col items-center gap-6 mb-8">
+
+            <div className="mb-6 flex flex-col items-center gap-5">
               <Hexagram lines={mirror.lines} size="md" className="w-28" />
               <div className="text-center">
-                <h4 className="text-3xl font-serif font-bold text-ink mb-1">{mirror.gua?.name || "未知"}</h4>
-                <p className="text-[10px] text-brand font-serif uppercase tracking-[0.4em]">{mirror.title}</p>
+                <h4 className="mb-1 font-serif text-2xl font-bold text-ink sm:text-3xl">{mirror.gua?.name || "未知"}</h4>
+                <p className="text-[10px] font-serif uppercase tracking-[0.35em] text-brand">{mirror.title}</p>
               </div>
             </div>
 
-            <div className="pt-6 border-t border-ink/5 opacity-40 group-hover:opacity-100 transition-opacity">
-              <p className="text-[11px] font-serif leading-relaxed text-ink/60 line-clamp-3 italic text-center">
+            <div className="border-t border-ink/5 pt-5 opacity-40 transition-opacity group-hover:opacity-100">
+              <p className="line-clamp-3 text-center text-[11px] font-serif italic leading-relaxed text-ink/60">
                 “{mirror.gua?.judgment}”
               </p>
             </div>
@@ -200,128 +285,152 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 lg:gap-11">
-        {/* AI Synthesis */}
-        <div className="lg:col-span-2 flex flex-col gap-8 p-9 sm:p-12 lg:p-14 border border-ink/5 rounded-[52px] bg-white/80 backdrop-blur-xl shadow-2xl relative overflow-hidden min-h-0">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-brand/30 to-transparent" />
-          
-          <div className="flex flex-col items-center gap-4 text-center shrink-0">
-            <div className="w-14 h-14 rounded-full bg-ink flex items-center justify-center text-bg shadow-xl">
-              <BookOpen size={28} />
-            </div>
-            <h3 className="text-3xl sm:text-4xl font-serif font-bold tracking-tight text-ink">观心报告</h3>
-            <div className="h-px w-32 bg-ink/10" />
-          </div>
+      <div className="flex flex-col gap-10">
+        <div className="relative flex min-h-0 flex-col gap-8 overflow-hidden rounded-[40px] border border-ink/5 bg-white/85 p-9 shadow-2xl backdrop-blur-xl sm:p-12 lg:p-14">
+          <div className="absolute top-0 left-0 h-px w-full bg-gradient-to-r from-transparent via-brand/30 to-transparent" />
 
-          <div className="flex flex-col flex-1 min-h-[min(28rem,52vh)]">
+          {showReportHeader && (
+            <div className="flex shrink-0 flex-col items-center gap-4 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-ink text-bg shadow-xl">
+                <BookOpen size={28} aria-hidden />
+              </div>
+              <h3 className="font-serif text-3xl font-bold tracking-tight text-ink sm:text-4xl">观心报告</h3>
+              <div className="h-px w-32 bg-ink/10" />
+            </div>
+          )}
+
+          <div className="flex min-h-[min(24rem,42vh)] flex-1 flex-col">
             {error ? (
-              <div className="flex flex-col items-center justify-center flex-1 text-center py-12 text-brand/70 font-serif italic whitespace-pre-wrap text-sm max-w-xl mx-auto px-4">
+              <div className="flex flex-1 flex-col items-center justify-center px-4 py-12 text-center text-sm font-serif text-brand/75 italic whitespace-pre-wrap">
                 {error}
               </div>
             ) : interpretation.trim().length > 0 ? (
-              <div className="flex flex-col gap-6 flex-1">
-                <div className="markdown-report text-[1.05rem] sm:text-xl leading-relaxed text-ink/75">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{normalizedInterpretation}</ReactMarkdown>
+              <div className="flex flex-1 flex-col gap-6">
+                <div className="relative min-h-0">
+                  <div className="markdown-report text-[1.05rem] leading-relaxed text-ink/75 sm:text-xl">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{normalizedInterpretation}</ReactMarkdown>
+                  </div>
                 </div>
                 {isLoading && (
-                  <div className="flex items-center justify-center gap-2 text-[11px] text-ink/25 font-serif italic tracking-widest pt-2">
+                  <div className="flex items-center justify-center gap-2 pt-2 text-[11px] font-serif tracking-widest text-ink/25 italic">
                     <Loader2 size={14} className="animate-spin text-brand" aria-hidden />
                     <span>生成中…</span>
                   </div>
                 )}
               </div>
             ) : isLoading ? (
-              <div className="flex flex-col items-center justify-center text-center flex-1 gap-6 py-12">
+              <div className="flex flex-1 flex-col items-center justify-center gap-6 py-12 text-center">
                 <div className="relative" aria-busy="true" aria-live="polite">
                   <Loader2 className="animate-spin text-brand" size={48} aria-hidden />
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className="w-3 h-3 bg-brand rounded-full animate-ping opacity-60" />
+                    <span className="h-3 w-3 animate-ping rounded-full bg-brand opacity-60" />
                   </div>
                 </div>
-                <div className="text-sm text-ink/45 font-serif italic tracking-widest animate-pulse max-w-md px-4">
+                <div className="max-w-md animate-pulse px-4 text-sm font-serif tracking-widest text-ink/45 italic">
                   {thinkingHint}
                 </div>
               </div>
             ) : (
-              <div className="flex flex-1 flex-col items-center justify-center py-16 text-center text-sm text-ink/35 font-serif">
+              <div className="flex flex-1 flex-col items-center justify-center py-16 text-center text-sm font-serif text-ink/35">
                 暂无可呈现的解读内容。
               </div>
             )}
           </div>
         </div>
 
-        {/* User Reflection */}
-        <div className="flex flex-col gap-7 p-9 sm:p-10 border border-ink/5 rounded-[52px] bg-white/40 backdrop-blur-md shadow-xl min-h-0 lg:sticky lg:top-28 lg:self-start">
-          <div className="flex flex-col gap-2">
-            <h4 className="text-2xl font-serif font-bold text-ink">自我觉察</h4>
-            <p className="text-xs text-ink/40 font-serif">记录你此时此刻的感悟与回响</p>
-          </div>
-          
-          <Textarea
-            placeholder="在此写下你的觉察..."
-            value={reflection}
-            onChange={(e) => setReflection(e.target.value)}
-            rows={8}
-            className={cn(
-              "min-h-[12rem] w-full flex-1 resize-y rounded-[32px] border-ink/10 bg-white/20 p-6 font-serif text-lg leading-relaxed md:text-lg",
-              "placeholder:text-ink/10",
-              "focus-visible:border-brand/30 focus-visible:ring-brand/20"
+        {reportReadyForFollowUp && (
+          <section className="flex flex-col gap-8 pt-2">
+            <div className="text-center">
+              <p className="text-[10px] font-medium tracking-[0.35em] text-ink/30 uppercase">DEEP INQUIRY</p>
+              <h4 className="mt-2 font-serif text-xl leading-snug text-ink/60 sm:text-[1.35rem]">
+                如果你愿意继续看下去，镜微可以陪你从三个方向深入：
+              </h4>
+            </div>
+            {deepInquiryLoading || deepInquiryQuestions === null ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="h-28 animate-pulse rounded-[40px] border border-ink/5 bg-white/40 p-8"
+                    aria-hidden
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {(deepInquiryQuestions.length === 3 ? deepInquiryQuestions : [...FALLBACK_DEEP_INQUIRY]).map(
+                  (label, i) => (
+                    <button
+                      key={`deep-inquiry-${i}`}
+                      type="button"
+                      onClick={() => {
+                        setSelectedDirection(label);
+                        setShowDialogue(true);
+                      }}
+                      className={cn(
+                        "flex min-h-[7.5rem] items-center rounded-[40px] border border-ink/5 bg-white p-8 text-left font-serif text-lg leading-snug text-ink/60 shadow-sm transition-all",
+                        "hover:border-brand/25 hover:bg-brand/[0.04] hover:text-ink hover:shadow-md"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  )
+                )}
+              </div>
             )}
-          />
+          </section>
+        )}
 
-          <Button
-            type="button"
-            onClick={() => onSave?.(interpretation + (reflection ? `\n\n### 自我觉察\n${reflection}` : ""))}
-            className={cn(
-              "h-auto min-h-14 w-full rounded-full bg-ink py-6 font-serif text-lg font-bold tracking-widest text-bg shadow-xl shadow-ink/10",
-              "hover:bg-ink/90 hover:opacity-100",
-              "focus-visible:ring-brand/40"
-            )}
-          >
-            保存这份档案
-          </Button>
-        </div>
-      </div>
+        {reportReadyForFollowUp && (
+          <section className="grid grid-cols-1 gap-10 rounded-[40px] border border-ink/5 bg-white/45 p-8 shadow-xl backdrop-blur-md lg:grid-cols-2 lg:gap-12 lg:p-11">
+            <div className="flex min-h-0 flex-col gap-5">
+              <div>
+                <h4 className="font-serif text-2xl font-bold text-ink">自我觉察</h4>
+                <p className="mt-1 text-xs font-serif text-ink/40">把你此刻的回响留在这里，作为对话的补充。</p>
+              </div>
+              <Textarea
+                placeholder="在此写下你的觉察..."
+                value={reflection}
+                onChange={(e) => setReflection(e.target.value)}
+                rows={8}
+                className={cn(
+                  "min-h-[12rem] w-full flex-1 resize-y rounded-[28px] border-ink/10 bg-white/30 p-6 font-serif text-lg leading-relaxed",
+                  "placeholder:text-ink/10",
+                  "focus-visible:border-brand/30 focus-visible:ring-brand/20"
+                )}
+              />
+              <Button
+                type="button"
+                onClick={() => onSave?.(interpretation + (reflection ? `\n\n### 自我觉察\n${reflection}` : ""))}
+                className={cn(
+                  "h-auto min-h-14 w-full rounded-full bg-ink py-6 font-serif text-lg font-bold tracking-widest text-bg shadow-xl shadow-ink/10",
+                  "hover:bg-ink/90 hover:opacity-100",
+                  "focus-visible:ring-brand/40"
+                )}
+              >
+                保存这次照见
+              </Button>
+            </div>
 
-      <div className="flex flex-col sm:flex-row justify-center gap-5 sm:gap-6 pt-8 sm:pt-10 pb-6">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            const shareUrl = process.env.APP_URL || window.location.origin;
-            const shareText = `我在镜微易经获得了一份观心报告：${benGua?.name}卦。针对我的困惑：“${question}”，AI 给了我深刻的启发。`;
-            if (navigator.share) {
-              navigator.share({
-                title: "镜微易经 · 观心报告",
-                text: shareText,
-                url: shareUrl,
-              }).catch(console.error);
-            } else {
-              navigator.clipboard.writeText(`${shareText}\n查看更多：${shareUrl}`);
-              alert("链接已复制到剪贴板");
-            }
-          }}
-          className={cn(
-            "h-auto min-h-12 gap-3 rounded-full border-ink/10 px-10 py-5 font-serif text-sm tracking-widest text-ink/50",
-            "hover:bg-white hover:text-ink"
-          )}
-        >
-          <Share2 size={18} className="transition-transform group-hover/button:scale-110" aria-hidden />
-          分享这份观照
-        </Button>
-        <Button
-          type="button"
-          onClick={() => setShowDialogue(true)}
-          className={cn(
-            "h-auto min-h-12 gap-3 rounded-full bg-ink px-10 py-5 font-serif text-sm tracking-widest text-bg shadow-2xl shadow-ink/20",
-            "hover:bg-ink/90 hover:opacity-100",
-            "hover:scale-[1.02] active:scale-[0.99]",
-            "focus-visible:ring-brand/40"
-          )}
-        >
-          <MessageCircle size={18} className="group-hover/button:animate-bounce" aria-hidden />
-          继续深度对话
-        </Button>
+            <div className="flex flex-col justify-between gap-8 lg:pt-1">
+              <blockquote className="border-none font-serif text-base italic leading-relaxed text-ink/55 md:text-lg">
+                {SELF_OBSERVATION_QUOTE}
+              </blockquote>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleShare}
+                className={cn(
+                  "h-auto min-h-12 self-start rounded-full border-ink/12 px-8 py-4 font-serif text-sm tracking-widest text-ink/60",
+                  "hover:bg-white hover:text-ink"
+                )}
+              >
+                <Share2 size={17} className="shrink-0" aria-hidden />
+                <span className="ml-2">分享这段见解</span>
+              </Button>
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

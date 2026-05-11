@@ -2,6 +2,9 @@
  * 方舟 AI 调用逻辑：供 Express（本机/自建 Node）与 Vercel Serverless（api/*）共用。
  */
 import OpenAI from "openai";
+import { buildDeepInquiryUserPrompt } from "./prompts/deep-inquiry.js";
+import { buildInterpretReportUserPrompt } from "./prompts/interpret-report.js";
+import { buildChatSystemInstruction } from "./prompts/chat-dialogue.js";
 
 export const ARK_BASE_URL_DEFAULT = "https://ark.cn-beijing.volces.com/api/coding/v3";
 export const ARK_MODEL_DEFAULT = "ark-code-latest";
@@ -71,52 +74,19 @@ export function getArkModelId(): string {
   return process.env.ARK_MODEL?.trim() || ARK_MODEL_DEFAULT;
 }
 
-function buildInterpretUserPrompt(question: unknown, benGua: unknown, huGua: unknown, cuoGua: unknown, zongGua: unknown) {
-  const bg = benGua as { name?: string } | undefined;
-  const hg = huGua as { name?: string } | undefined;
-  const cg = cuoGua as { name?: string } | undefined;
-  const zg = zongGua as { name?: string } | undefined;
-  return `
-        你是一位精通易经哲学与深度心理学的引导者。
-        
-        用户的问题/意念: "${question || "未提供具体问题，请进行一般性指引"}"
-        
-        系统通过四面“镜子”捕捉到了以下卦象：
-        1. 现状之镜 (本卦): ${bg?.name} - 代表当前事态的外部表现与现状。
-        2. 内心之镜 (互卦): ${hg?.name} - 代表事态内部隐藏的动机、用户的真实内心状态。
-        3. 阴影之镜 (错卦): ${cg?.name} - 代表被忽视的对立面、潜意识中的恐惧或盲点。
-        4. 视角之镜 (综卦): ${zg?.name} - 代表换位思考后的客观环境或事态的另一面。
-        
-        请基于这四重维度的交织，为用户提供一份深度的“内省报告”。
-        报告应避免迷信色彩，侧重于心理分析与行动建议：
-        - “观照现状”：分析本卦揭示的处境。
-        - “洞察内心”：通过互卦揭示用户可能未察觉的深层渴望或矛盾。
-        - “直面阴影”：通过错卦提醒用户需要注意的盲区。
-        - “通变之道”：综合四卦，给出如何调整心态或应对的建议。
-        
-        请使用优雅、克制、富有启发性的中文。
-      `;
-}
-
-function buildChatSystemInstruction(question: unknown, interpretation: unknown, round: unknown) {
-  return `你是一位深度心理咨询师与易经哲学引导者。
-      
-      当前对话背景：
-      - 用户的问题: "${question}"
-      - 初始卦象解读: "${interpretation}"
-      - 当前轮次: ${round}/8
-      
-      你的目标：
-      1. 协助用户看见自己的“叙事”（即他们是如何定义自己和处境的）。
-      2. 引导用户发现不同视角的自己（通过错卦、综卦的启发）。
-      3. 探索新的可能性转变。
-      
-      对话规则：
-      - 每次只提一个深刻的问题。
-      - 语气要优雅、克制、富有同理心。
-      - 严禁算命或玄学说教，侧重心理觉察。
-      - 如果是最后一轮（第8轮），请进行总结并给出一个充满希望的结语。
-      - 保持对话的连贯性，基于用户的回答进行追问。`;
+function parseDeepInquiryJson(text: string): string[] | null {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!obj || typeof obj !== "object") return null;
+  const arr = (obj as { deepInquiry?: unknown }).deepInquiry;
+  if (!Array.isArray(arr) || arr.length !== 3) return null;
+  const out = arr.map((x) => String(x ?? "").trim()).filter((s) => s.length > 0);
+  if (out.length !== 3) return null;
+  return out;
 }
 
 export type ArkJsonResponse = Record<string, unknown>;
@@ -140,7 +110,7 @@ export async function runInterpretApi(body: unknown): Promise<{ status: number; 
       return { status: 500, json: { error: ERR_NO_ARK_KEY } };
     }
     const modelId = getArkModelId();
-    const userContent = buildInterpretUserPrompt(b.question, b.benGua, b.huGua, b.cuoGua, b.zongGua);
+    const userContent = buildInterpretReportUserPrompt(b.question, b.benGua, b.huGua, b.cuoGua, b.zongGua);
     const completion = (await client.chat.completions.create({
       model: modelId,
       messages: [{ role: "user", content: userContent }],
@@ -155,6 +125,66 @@ export async function runInterpretApi(body: unknown): Promise<{ status: number; 
   }
 }
 
+export async function runDeepInquiryApi(body: unknown): Promise<{ status: number; json: ArkJsonResponse }> {
+  try {
+    const b = body as {
+      question?: unknown;
+      interpretation?: unknown;
+      benGua?: unknown;
+      huGua?: unknown;
+      cuoGua?: unknown;
+      zongGua?: unknown;
+    };
+    const interpretation = String(b.interpretation ?? "").trim();
+    if (!interpretation) {
+      return { status: 400, json: { error: "interpretation 不能为空" } };
+    }
+    const question = String(b.question ?? "").trim() || "未提供具体问题";
+    const benName = (b.benGua as { name?: string } | undefined)?.name?.trim() || "未知";
+    const huName = (b.huGua as { name?: string } | undefined)?.name?.trim() || "未知";
+    const cuoName = (b.cuoGua as { name?: string } | undefined)?.name?.trim() || "未知";
+    const zongName = (b.zongGua as { name?: string } | undefined)?.name?.trim() || "未知";
+
+    const client = getArkClient();
+    if (!client) {
+      return { status: 500, json: { error: ERR_NO_ARK_KEY } };
+    }
+    const modelId = getArkModelId();
+    const userContent = buildDeepInquiryUserPrompt({
+      question,
+      interpretation,
+      benName,
+      huName,
+      cuoName,
+      zongName,
+    });
+
+    const completion = (await client.chat.completions.create({
+      model: modelId,
+      messages: [{ role: "user", content: userContent }],
+      stream: false,
+      response_format: { type: "json_object" },
+    })) as OpenAI.Chat.ChatCompletion;
+
+    const text = completion.choices[0]?.message?.content ?? "";
+    const deepInquiry = parseDeepInquiryJson(text);
+    if (!deepInquiry) {
+      return {
+        status: 502,
+        json: {
+          error: "模型返回的 JSON 无效或 deepInquiry 不是长度为 3 的字符串数组",
+          detail: text.slice(0, 800),
+        },
+      };
+    }
+    return { status: 200, json: { deepInquiry } };
+  } catch (error) {
+    console.error("Deep Inquiry API Error:", error);
+    const { error: msg, detail } = formatArkFailure(error);
+    return { status: 500, json: { error: msg, detail } };
+  }
+}
+
 export async function runChatApi(body: unknown): Promise<{ status: number; json: ArkJsonResponse }> {
   try {
     const b = body as {
@@ -163,13 +193,14 @@ export async function runChatApi(body: unknown): Promise<{ status: number; json:
       interpretation?: unknown;
       round?: unknown;
       input?: unknown;
+      direction?: unknown;
     };
     const client = getArkClient();
     if (!client) {
       return { status: 500, json: { error: ERR_NO_ARK_KEY } };
     }
     const modelId = getArkModelId();
-    const systemInstruction = buildChatSystemInstruction(b.question, b.interpretation, b.round);
+    const systemInstruction = buildChatSystemInstruction(b.question, b.interpretation, b.round, b.direction);
     const history = Array.isArray(b.messages)
       ? b.messages.map((m) => ({
           role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
@@ -210,7 +241,7 @@ export async function* runInterpretStream(body: unknown): AsyncGenerator<ArkStre
       return;
     }
     const modelId = getArkModelId();
-    const userContent = buildInterpretUserPrompt(b.question, b.benGua, b.huGua, b.cuoGua, b.zongGua);
+    const userContent = buildInterpretReportUserPrompt(b.question, b.benGua, b.huGua, b.cuoGua, b.zongGua);
 
     const stream = await client.chat.completions.create({
       model: modelId,
@@ -238,6 +269,7 @@ export async function* runChatStream(body: unknown): AsyncGenerator<ArkStreamDel
       interpretation?: unknown;
       round?: unknown;
       input?: unknown;
+      direction?: unknown;
     };
     const client = getArkClient();
     if (!client) {
@@ -245,7 +277,7 @@ export async function* runChatStream(body: unknown): AsyncGenerator<ArkStreamDel
       return;
     }
     const modelId = getArkModelId();
-    const systemInstruction = buildChatSystemInstruction(b.question, b.interpretation, b.round);
+    const systemInstruction = buildChatSystemInstruction(b.question, b.interpretation, b.round, b.direction);
     const history = Array.isArray(b.messages)
       ? b.messages.map((m) => ({
           role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),

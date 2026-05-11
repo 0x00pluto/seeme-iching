@@ -2,7 +2,13 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import dotenv from "dotenv";
-import { runChatApi, runChatStream, runInterpretApi, runInterpretStream } from "./server/ark-api.js";
+import {
+  runChatApi,
+  runChatStream,
+  runDeepInquiryApi,
+  runInterpretApi,
+  runInterpretStream,
+} from "./server/ark-api.js";
 import { pipeArkStreamToSse } from "./server/pipe-ark-sse.js";
 import { flushHeadersAndInitialSsePing } from "./server/sse-warmup.js";
 
@@ -16,6 +22,11 @@ async function startServer() {
 
   app.post("/api/interpret", async (req, res) => {
     const { status, json } = await runInterpretApi(req.body);
+    res.status(status).json(json);
+  });
+
+  app.post("/api/interpret/deep-inquiry", async (req, res) => {
+    const { status, json } = await runDeepInquiryApi(req.body);
     res.status(status).json(json);
   });
 

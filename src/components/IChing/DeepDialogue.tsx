@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, Send, Loader2, X, Sparkles, User, Bot } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 
-const DIALOGUE_STORAGE_PREFIX = "iching_deep_dialogue_";
 import { streamDeepChat } from "@/lib/ark-client";
+
+const DIALOGUE_STORAGE_PREFIX = "iching_deep_dialogue_";
 
 interface Message {
   role: "user" | "assistant";
@@ -17,10 +18,36 @@ interface DeepDialogueProps {
   divinationId: string;
   question: string;
   interpretation: string;
+  /** 用户从「深入方向」卡片点选的一句；多轮对话 system 与首条气泡会锚定此句 */
+  direction?: string;
   onClose: () => void;
 }
 
-export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, question, interpretation, onClose }) => {
+function buildOpeningAssistantContent(question: string, direction?: string): string {
+  const roundOne =
+    "**第一轮：**\n在刚才的解读中，哪一个“镜子”（现状、内心、阴影、视角）最让你感到意外或触动？为什么？";
+  const dir = direction?.trim();
+  if (dir) {
+    return `针对你的指引：“${dir}”，让我们深入看看这件事。\n\n${roundOne}`;
+  }
+  return `你好。通过刚才的卦象，我们已经触碰到了你内心的一角。
+
+针对你的困惑：“${question}”，
+以及我们看到的现状、内心、阴影与视角。
+
+现在，让我们开启一段深度的对话（共8轮）。
+我将通过提问的方式，协助你更好地看见自己的叙事，发现不同视角的自己。
+
+${roundOne}`;
+}
+
+export const DeepDialogue: React.FC<DeepDialogueProps> = ({
+  divinationId,
+  question,
+  interpretation,
+  direction,
+  onClose,
+}) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -29,33 +56,7 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    // Initial system message or greeting
-    const initialMessage: Message = {
-      role: "assistant",
-      content: `你好。通过刚才的卦象，我们已经触碰到了你内心的一角。
-
-针对你的困惑：“${question}”，
-以及我们看到的现状、内心、阴影与视角。
-
-现在，让我们开启一段深度的对话（共8轮）。
-我将通过提问的方式，协助你更好地看见自己的叙事，发现不同视角的自己。
-
-**第一轮：**
-在刚才的解读中，哪一个“镜子”（现状、内心、阴影、视角）最让你感到意外或触动？为什么？`,
-      timestamp: Date.now()
-    };
-    setMessages([initialMessage]);
-    saveSession([initialMessage], 1);
-  }, []);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  const saveSession = (newMessages: Message[], currentRound: number) => {
+  const saveSession = useCallback((newMessages: Message[], currentRound: number) => {
     try {
       const payload = {
         id: sessionId,
@@ -69,7 +70,23 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
     } catch (e) {
       console.error("Failed to persist dialogue session", e);
     }
-  };
+  }, [sessionId, divinationId]);
+
+  useEffect(() => {
+    const initialMessage: Message = {
+      role: "assistant",
+      content: buildOpeningAssistantContent(question, direction),
+      timestamp: Date.now(),
+    };
+    setMessages([initialMessage]);
+    saveSession([initialMessage], 1);
+  }, [question, direction, saveSession]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading || round > 8) return;
@@ -99,6 +116,7 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
             interpretation,
             round,
             input: userContent,
+            direction,
           },
           {
             onDelta: (delta) => {

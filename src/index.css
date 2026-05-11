@@ -9,11 +9,11 @@
 @theme {
   --font-serif: "Noto Serif SC", serif;
   --font-garamond: "EB Garamond", serif;
-  --color-bg: #fdfcf9;
+  --color-bg: #fdfbf7;
   --color-ink: #1a1a1a;
   /** 镜微品牌朱砂红；与 shadcn 语义色 `accent`（浅灰 hover）区分开，避免接入 shadcn 后 `text-accent` 不可见 */
-  --color-brand: #8b0000;
-  --color-brand-foreground: #fdfcf9;
+  --color-brand: #8b2b2b;
+  --color-brand-foreground: #fdfbf7;
 }
 
 body {
