@@ -156,7 +156,7 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
         {/* Header */}
         <div className="px-8 py-6 border-b border-ink/5 flex items-center justify-between bg-white/50 backdrop-blur-md">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent">
+            <div className="w-10 h-10 rounded-full bg-brand/10 flex items-center justify-center text-brand">
               <MessageCircle size={20} />
             </div>
             <div>
@@ -168,7 +168,7 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
                       key={i} 
                       className={cn(
                         "w-2 h-1 rounded-full transition-all",
-                        i < round ? "bg-accent w-4" : "bg-ink/10"
+                        i < round ? "bg-brand w-4" : "bg-ink/10"
                       )} 
                     />
                   ))}
@@ -202,14 +202,14 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
             >
               <div className={cn(
                 "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm",
-                msg.role === "user" ? "bg-accent text-bg" : "bg-ink text-bg"
+                msg.role === "user" ? "bg-brand text-bg" : "bg-ink text-bg"
               )}>
                 {msg.role === "user" ? <User size={14} /> : <Bot size={14} />}
               </div>
               <div className={cn(
                 "p-6 rounded-[32px] font-serif text-lg leading-relaxed shadow-sm",
                 msg.role === "user" 
-                  ? "bg-accent/5 text-ink border border-accent/10 rounded-tr-none" 
+                  ? "bg-brand/5 text-ink border border-brand/10 rounded-tr-none" 
                   : "bg-white border border-ink/5 rounded-tl-none"
               )}>
                 <div className="prose prose-sm prose-ink max-w-none">
@@ -226,7 +226,7 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
                 <Bot size={14} />
               </div>
               <div className="p-6 rounded-[32px] bg-white border border-ink/5 rounded-tl-none flex items-center gap-3">
-                <Loader2 size={16} className="animate-spin text-accent" />
+                <Loader2 size={16} className="animate-spin text-brand" />
                 <span className="text-sm font-serif italic text-ink/30">正在深思...</span>
               </div>
             </div>
@@ -248,12 +248,12 @@ export const DeepDialogue: React.FC<DeepDialogueProps> = ({ divinationId, questi
                   handleSend();
                 }
               }}
-              className="w-full p-6 pr-16 rounded-[32px] border border-ink/10 bg-white focus:outline-none focus:ring-4 focus:ring-accent/5 focus:border-accent/20 transition-all resize-none font-serif text-lg leading-relaxed shadow-inner disabled:opacity-50"
+              className="w-full p-6 pr-16 rounded-[32px] border border-ink/10 bg-white focus:outline-none focus:ring-4 focus:ring-brand/5 focus:border-brand/20 transition-all resize-none font-serif text-lg leading-relaxed shadow-inner disabled:opacity-50"
             />
             <button
               onClick={handleSend}
               disabled={!input.trim() || isLoading || round > 8}
-              className="absolute right-4 top-1/2 -translate-y-1/2 p-4 rounded-full bg-ink text-bg hover:bg-accent transition-all disabled:opacity-20 disabled:hover:bg-ink"
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-4 rounded-full bg-ink text-bg hover:bg-brand transition-all disabled:opacity-20 disabled:hover:bg-ink"
             >
               <Send size={20} />
             </button>

@@ -66,7 +66,7 @@ export const Home: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg text-ink selection:bg-accent/10 selection:text-accent">
+    <div className="min-h-screen flex flex-col bg-bg text-ink selection:bg-brand/10 selection:text-brand">
       {/* Toaster is in App.tsx */}
       
       <header className="flex justify-between items-center px-8 py-6 border-b border-ink/5 sticky top-0 bg-bg/80 backdrop-blur-md z-50">
@@ -87,7 +87,7 @@ export const Home: React.FC = () => {
             onClick={() => setState("history")}
             className={cn(
               "text-xs font-serif tracking-widest uppercase flex items-center gap-2 transition-colors",
-              state === "history" ? "text-accent" : "text-ink/40 hover:text-ink/80"
+              state === "history" ? "text-brand" : "text-ink/40 hover:text-ink/80"
             )}
           >
             <HistoryIcon size={14} />
@@ -110,11 +110,11 @@ export const Home: React.FC = () => {
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center justify-center gap-4 text-accent font-serif tracking-[0.4em] uppercase"
+                  className="flex items-center justify-center gap-4 text-brand font-serif tracking-[0.4em] uppercase"
                 >
-                  <div className="h-px w-8 bg-accent/30" />
+                  <div className="h-px w-8 bg-brand/30" />
                   <span>以卦为镜 · 观心自省</span>
-                  <div className="h-px w-8 bg-accent/30" />
+                  <div className="h-px w-8 bg-brand/30" />
                 </motion.div>
                 
                 <h2 className="text-5xl md:text-7xl font-serif font-bold tracking-tight leading-[1.1] text-ink max-w-4xl">
@@ -137,7 +137,7 @@ export const Home: React.FC = () => {
                     placeholder="闭目静思，在此输入你当下的困惑或意念..."
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
-                    className="w-full h-48 p-8 rounded-[40px] border border-ink/10 bg-white/30 backdrop-blur-md focus:outline-none focus:ring-4 focus:ring-accent/5 focus:border-accent/20 transition-all resize-none font-serif text-xl leading-relaxed placeholder:text-ink/10 shadow-2xl shadow-ink/5"
+                    className="w-full h-48 p-8 rounded-[40px] border border-ink/10 bg-white/30 backdrop-blur-md focus:outline-none focus:ring-4 focus:ring-brand/5 focus:border-brand/20 transition-all resize-none font-serif text-xl leading-relaxed placeholder:text-ink/10 shadow-2xl shadow-ink/5"
                   />
                   <div className="absolute bottom-6 right-8 flex items-center gap-2 text-[10px] text-ink/20 font-serif uppercase tracking-widest pointer-events-none">
                     <Sparkles size={12} />
@@ -151,13 +151,13 @@ export const Home: React.FC = () => {
                   className={cn(
                     "group relative px-16 py-8 rounded-full bg-ink text-bg font-serif text-2xl font-bold tracking-[0.2em] overflow-hidden transition-all shadow-2xl shadow-ink/20",
                     canStartDivination
-                      ? "active:scale-95 hover:shadow-accent/20 cursor-pointer"
+                      ? "active:scale-95 hover:shadow-brand/20 cursor-pointer"
                       : "opacity-40 cursor-not-allowed"
                   )}
                 >
                   <div
                     className={cn(
-                      "absolute inset-0 bg-gradient-to-r from-accent/0 via-accent/20 to-accent/0 transition-transform duration-1000",
+                      "absolute inset-0 bg-gradient-to-r from-brand/0 via-brand/20 to-brand/0 transition-transform duration-1000",
                       canStartDivination ? "-translate-x-full group-hover:translate-x-full" : "-translate-x-full"
                     )}
                   />
@@ -176,17 +176,17 @@ export const Home: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-16 pt-32 border-t border-ink/5 w-full">
                 <div className="flex flex-col gap-4 text-left group">
-                  <div className="text-xs text-accent/40 font-serif tracking-widest uppercase group-hover:text-accent transition-colors">01 · 现状之镜</div>
+                  <div className="text-xs text-brand/40 font-serif tracking-widest uppercase group-hover:text-brand transition-colors">01 · 现状之镜</div>
                   <h4 className="text-xl font-serif font-bold text-ink/80">观照当下</h4>
                   <p className="text-sm text-ink/40 font-serif leading-relaxed">通过本卦，客观审视你目前所处的外部环境与事态表象。</p>
                 </div>
                 <div className="flex flex-col gap-4 text-left group">
-                  <div className="text-xs text-accent/40 font-serif tracking-widest uppercase group-hover:text-accent transition-colors">02 · 内心之镜</div>
+                  <div className="text-xs text-brand/40 font-serif tracking-widest uppercase group-hover:text-brand transition-colors">02 · 内心之镜</div>
                   <h4 className="text-xl font-serif font-bold text-ink/80">洞察动机</h4>
                   <p className="text-sm text-ink/40 font-serif leading-relaxed">通过互卦，揭示事态核心隐藏的动力，以及你内心深处的真实渴望。</p>
                 </div>
                 <div className="flex flex-col gap-4 text-left group">
-                  <div className="text-xs text-accent/40 font-serif tracking-widest uppercase group-hover:text-accent transition-colors">03 · 通变之道</div>
+                  <div className="text-xs text-brand/40 font-serif tracking-widest uppercase group-hover:text-brand transition-colors">03 · 通变之道</div>
                   <h4 className="text-xl font-serif font-bold text-ink/80">心理指引</h4>
                   <p className="text-sm text-ink/40 font-serif leading-relaxed">结合阴影与视角之镜，由 AI 提供多维度的深度心理分析与行动启发。</p>
                 </div>
@@ -230,13 +230,14 @@ export const Home: React.FC = () => {
             >
               <div className="max-w-6xl mx-auto pt-12 px-8 flex items-center justify-between">
                 <button 
+                  type="button"
                   onClick={goBack}
-                  className="flex items-center gap-2 text-xs text-ink/30 hover:text-ink/60 transition-colors font-serif tracking-widest uppercase"
+                  className="flex items-center gap-2 text-xs text-ink/30 hover:text-ink/60 transition-colors font-serif tracking-widest uppercase rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/25 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
                 >
-                  <ArrowLeft size={14} />
-                  <span>重新观照</span>
+                  <ArrowLeft size={14} aria-hidden />
+                  <span>重新测算</span>
                 </button>
-                <div className="text-[10px] text-accent font-serif tracking-[0.3em] uppercase">观心报告 · 正在显现</div>
+                <div className="text-[10px] text-brand font-serif tracking-[0.3em] uppercase">观心报告 · 正在呈现</div>
               </div>
               <Interpretation 
                 lines={lines} 

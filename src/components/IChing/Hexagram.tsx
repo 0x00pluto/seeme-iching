@@ -34,7 +34,7 @@ export const Hexagram: React.FC<HexagramProps> = ({ lines, className, size = "md
                 className={cn(
                   "w-full rounded-full transition-all duration-500", 
                   lineHeights[size], 
-                  isChanging ? "bg-accent shadow-[0_0_15px_rgba(var(--accent-rgb),0.4)]" : "bg-ink/80 group-hover:bg-ink"
+                  isChanging ? "bg-brand shadow-[0_0_15px_rgb(139_0_0/0.4)]" : "bg-ink/80 group-hover:bg-ink"
                 )} 
               />
             ) : (
@@ -43,22 +43,22 @@ export const Hexagram: React.FC<HexagramProps> = ({ lines, className, size = "md
                   className={cn(
                     "w-[42%] rounded-full transition-all duration-500", 
                     lineHeights[size], 
-                    isChanging ? "bg-accent shadow-[0_0_15px_rgba(var(--accent-rgb),0.4)]" : "bg-ink/80 group-hover:bg-ink"
+                    isChanging ? "bg-brand shadow-[0_0_15px_rgb(139_0_0/0.4)]" : "bg-ink/80 group-hover:bg-ink"
                   )} 
                 />
                 <div 
                   className={cn(
                     "w-[42%] rounded-full transition-all duration-500", 
                     lineHeights[size], 
-                    isChanging ? "bg-accent shadow-[0_0_15px_rgba(var(--accent-rgb),0.4)]" : "bg-ink/80 group-hover:bg-ink"
+                    isChanging ? "bg-brand shadow-[0_0_15px_rgb(139_0_0/0.4)]" : "bg-ink/80 group-hover:bg-ink"
                   )} 
                 />
               </div>
             )}
             {isChanging && (
               <div className="absolute -right-8 flex items-center justify-center">
-                <div className="w-1.5 h-1.5 rounded-full bg-accent animate-ping opacity-50" />
-                <div className="absolute text-[10px] font-bold text-accent/40 tracking-tighter">
+                <div className="w-1.5 h-1.5 rounded-full bg-brand animate-ping opacity-50" />
+                <div className="absolute text-[10px] font-bold text-brand/40 tracking-tighter">
                   {line === 9 ? "阳动" : "阴动"}
                 </div>
               </div>
