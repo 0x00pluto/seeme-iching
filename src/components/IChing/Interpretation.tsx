@@ -1,4 +1,4 @@
-import { fetchDeepInquiry, streamInterpret } from "@/lib/ark-client";
+import { fetchDeepInquiry, InterpretDailyQuotaError, streamInterpret } from "@/lib/ark-client";
 import { HEXAGRAMS, LineType, getBinary, getCuoGuaLines, getHuGuaLines, getZongGuaLines } from "@/lib/iching";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,22 @@ const THINKING_HINTS = [
   "取象未毕，先让心静一息…",
   "四镜对照之中，答案正在显影…",
 ] as const;
+
+/** 将 resetsAt ISO 格式化为北京时间可读文案 */
+function formatResetsAtShanghai(iso: string): string {
+  if (!iso.trim()) return "下一东八区自然日 0 点";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString("zh-CN", {
+      timeZone: "Asia/Shanghai",
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  } catch {
+    return iso;
+  }
+}
 
 /** 主解读加载态下，一句文案展示时长（一次「呼吸」） */
 const BREATH_MS = 4000;
@@ -203,6 +219,13 @@ export const Interpretation: React.FC<InterpretationProps> = ({
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") return;
         console.error("API Error:", err);
+        if (err instanceof InterpretDailyQuotaError) {
+          const when = formatResetsAtShanghai(err.payload.resetsAt);
+          setError(
+            `${err.message}（已用 ${err.payload.used}/${err.payload.limit} 次）额度将在 ${when}（北京时间）起恢复。`
+          );
+          return;
+        }
         const hint =
           err instanceof Error && err.message !== "API request failed"
             ? err.message

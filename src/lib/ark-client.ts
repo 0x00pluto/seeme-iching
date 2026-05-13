@@ -20,6 +20,22 @@ export type DeepInquiryResponse = {
 // 当前实现：前端只走同源流式代理，不在浏览器直连方舟（避免 CORS / key 暴露）。
 // 对应后端端点：/api/interpret/stream、/api/interpret/deep-inquiry 与 /api/chat/stream
 
+export class InterpretDailyQuotaError extends Error {
+  readonly code = "INTERPRET_DAILY_QUOTA" as const;
+  constructor(
+    message: string,
+    public readonly payload: {
+      limit: number;
+      used: number;
+      resetsAt: string;
+      timezone?: string;
+    }
+  ) {
+    super(message);
+    this.name = "InterpretDailyQuotaError";
+  }
+}
+
 function parseSseLines(buffer: string): { events: string[]; rest: string } {
   const parts = buffer.split("\n\n");
   const rest = parts.pop() ?? "";
@@ -119,6 +135,29 @@ async function streamViaProxy(path: string, body: unknown, cb: StreamCallbacks, 
   });
 
   if (!res.ok || !res.body) {
+    const ct = res.headers.get("content-type") ?? "";
+    if (ct.includes("application/json")) {
+      const j = (await res.json()) as {
+        code?: string;
+        error?: string;
+        detail?: string;
+        limit?: number;
+        used?: number;
+        resetsAt?: string;
+        timezone?: string;
+      };
+      if (j.code === "INTERPRET_DAILY_QUOTA") {
+        throw new InterpretDailyQuotaError(j.error ?? "本日解读次数已用完", {
+          limit: j.limit ?? 3,
+          used: j.used ?? j.limit ?? 3,
+          resetsAt: j.resetsAt ?? "",
+          timezone: j.timezone,
+        });
+      }
+      const base = j.error ?? `代理请求失败（HTTP ${res.status}）`;
+      const detail = j.detail ?? "";
+      throw new Error(detail ? `${base}\n\n${detail}` : base);
+    }
     const detail = await res.text().catch(() => "");
     const base = `代理请求失败（HTTP ${res.status}）`;
     throw new Error(detail ? `${base}\n\n${detail}` : base);

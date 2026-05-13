@@ -18,6 +18,7 @@ import {
   handleLogout,
   handleMe,
 } from "./server/auth-handlers.js";
+import { consumeInterpretQuota, isQuotaBackendConfigured } from "./server/membership-quota.js";
 import { requireAuth, UNAUTHORIZED_RESPONSE } from "./server/require-auth.js";
 import { appendSessionCookie, appendClearSessionCookie } from "./server/user-session-cookie.js";
 import { buildAuthCallbackUrl, resolvePublicOrigin } from "./server/public-origin.js";
@@ -50,8 +51,8 @@ async function startServer() {
     res.status(result.status).json(result.json);
   });
 
-  app.get("/api/auth/me", (req, res) => {
-    const result = handleMe(req.headers.cookie);
+  app.get("/api/auth/me", async (req, res) => {
+    const result = await handleMe(req.headers.cookie);
     res.status(result.status).json(result.json);
   });
 
@@ -97,8 +98,24 @@ async function startServer() {
   });
 
   app.post("/api/interpret/stream", async (req, res) => {
-    if (!requireAuth(req.headers.cookie)) {
+    const session = requireAuth(req.headers.cookie);
+    if (!session) {
       res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    if (!isQuotaBackendConfigured()) {
+      res.status(503).json({ error: "解读额度服务未配置", detail: "缺少 SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY" });
+      return;
+    }
+    try {
+      const quota = await consumeInterpretQuota(session.sub);
+      if (!quota.allowed) {
+        res.status(429).json(quota.body);
+        return;
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      res.status(503).json({ error: "解读额度校验失败", detail: message });
       return;
     }
     try {

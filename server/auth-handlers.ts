@@ -1,3 +1,4 @@
+import { fetchEntitlementsPayload, isQuotaBackendConfigured } from "./membership-quota.js";
 import { getSupabaseAuthClient } from "./supabase-auth-client.js";
 import {
   encodeUserSessionToken,
@@ -116,10 +117,10 @@ export function handleLogout(): { status: number; json: Record<string, unknown> 
   return { status: 200, json: { ok: true } };
 }
 
-export function handleMe(cookieHeader: string | undefined): {
+export async function handleMe(cookieHeader: string | undefined): Promise<{
   status: number;
   json: Record<string, unknown>;
-} {
+}> {
   if (!process.env.USER_SESSION_SECRET?.trim()) {
     return { status: 200, json: { user: null } };
   }
@@ -127,8 +128,18 @@ export function handleMe(cookieHeader: string | undefined): {
   if (!session) {
     return { status: 200, json: { user: null } };
   }
-  return {
-    status: 200,
-    json: { user: { id: session.sub, email: session.email } },
-  };
+  const base = { user: { id: session.sub, email: session.email } };
+  if (!isQuotaBackendConfigured()) {
+    return { status: 200, json: { ...base, entitlements: null } };
+  }
+  try {
+    const entitlements = await fetchEntitlementsPayload(session.sub);
+    return { status: 200, json: { ...base, entitlements } };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      status: 503,
+      json: { error: "权益信息暂不可用", detail: msg, user: base.user },
+    };
+  }
 }

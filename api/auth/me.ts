@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     const cookieHeader =
       typeof req.headers.cookie === "string" ? req.headers.cookie : undefined;
-    const result = handleMe(cookieHeader);
+    const result = await handleMe(cookieHeader);
     res.status(result.status).json(result.json);
   } catch (e) {
     console.error("api/auth/me:", e);

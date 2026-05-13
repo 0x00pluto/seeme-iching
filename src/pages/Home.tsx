@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LineType } from "@/lib/iching";
-import { fetchAuthMe, postLogout, type AuthUser } from "@/lib/auth-api";
+import { fetchAuthMe, postLogout, type AuthUser, type Entitlements } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
 import {
   Sparkles,
@@ -41,9 +41,6 @@ function initialFromEmail(email: string): string {
   return ch.toLocaleUpperCase("en-US");
 }
 
-/** 订阅档位占位，后续可接 /api/auth/me */
-const SUBSCRIPTION_TIER: "free" | "pro" = "free";
-
 const HISTORY_STORAGE_KEY = "iching_history";
 
 type AppState = "landing" | "divination" | "interpretation" | "history";
@@ -54,6 +51,7 @@ export const Home: React.FC = () => {
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [historySearchOpen, setHistorySearchOpen] = useState(false);
@@ -81,7 +79,10 @@ export const Home: React.FC = () => {
     [history]
   );
 
-  const tierLabel = SUBSCRIPTION_TIER === "free" ? "免费" : "PRO";
+  const tierLabel = entitlements?.membership.tier.displayName ?? "免费";
+  const interpretHint =
+    entitlements &&
+    `今日解读 ${entitlements.interpret.used}/${entitlements.interpret.limit}（东八区自然日）`;
 
   useEffect(() => {
     const savedHistory = localStorage.getItem(HISTORY_STORAGE_KEY);
@@ -95,10 +96,12 @@ export const Home: React.FC = () => {
 
   const refreshAuth = useCallback(async () => {
     try {
-      const { user } = await fetchAuthMe();
-      setAuthUser(user);
+      const data = await fetchAuthMe();
+      setAuthUser(data.user);
+      setEntitlements(data.entitlements ?? null);
     } catch {
       setAuthUser(null);
+      setEntitlements(null);
     }
   }, []);
 
@@ -252,7 +255,8 @@ export const Home: React.FC = () => {
                 </button>
                 <span
                   className="rounded-full bg-ink/10 px-2 py-0.5 text-[10px] font-bold tracking-widest text-ink/70 uppercase"
-                  aria-label={tierLabel === "免费" ? "免费版" : "专业版"}
+                  aria-label={tierLabel === "免费" ? "免费版" : `${tierLabel}档`}
+                  title={interpretHint ?? undefined}
                 >
                   {tierLabel}
                 </span>
@@ -301,6 +305,9 @@ export const Home: React.FC = () => {
                       <DialogDescription className="mt-0.5 break-all text-xs text-ink/50">
                         {authUser.email ?? "—"}
                       </DialogDescription>
+                      {interpretHint ? (
+                        <p className="mt-2 text-xs text-ink/45">{interpretHint}</p>
+                      ) : null}
                     </div>
                   </div>
 

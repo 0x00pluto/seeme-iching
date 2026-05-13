@@ -31,11 +31,29 @@
 
 | 命令 | 作用 |
 |------|------|
-| `pnpm run db:migration:new -- <snake_name>` | 在 `supabase/migrations/` 生成带时间戳的新文件（名称跟在 `--` 后）。 |
+| `pnpm run db:migration:new -- <snake_name>` | 由 [`scripts/db-migration-new.mjs`](../scripts/db-migration-new.mjs) 在 `supabase/migrations/` 生成空 SQL；**文件名时间戳为 Asia/Shanghai 墙钟** `YYYYMMDDHHMMSS`（若与目录内最大前缀冲突会自动顺延秒数）。 |
 | `pnpm run db:migration:list` | 查看远端/本地迁移应用情况（等价 `supabase migration list`）。 |
 | `pnpm run db:migrate` | 将未应用的 migration 推送到 **当前 link 指向的库**（`supabase db push`）。 |
 
-**Don't**：在未确认 `supabase link` 目标前执行 `db:migrate`，避免把实验 DDL 推到生产。
+**说明**：勿依赖裸跑 `supabase migration new` 作为本仓库标准流程——其时间戳随**本机系统时区**变化；团队以脚本生成的东八区前缀为准。
+
+**远端与本地顺序冲突**：若远端已应用较新版本，而仓库里又加入**更早时间戳**的文件，`db push` 会拒绝并提示 `--include-all`。更干净的做法见 **§2.1**（`migration repair`）。在未确认 `supabase link` 目标前勿执行 `db:migrate`。
+
+---
+
+## 2.1 迁移历史纠偏：`migration repair`（空库 / 可接受重放 DDL 时）
+
+典型场景：远端只记了较新的版本 **B**（例如 `…_connectivity_check`），但仓库里又加入了时间戳 **早于 B** 的 migration **A**，`db push` 报「inserted before the last migration」。
+
+1. 将远端历史表中版本 **B** 标为 **未应用**（**不会**自动执行 DROP；已创建的表仍在库里）：
+   ```bash
+   pnpm exec supabase migration repair <B 的时间戳> --status reverted
+   ```
+2. 再执行 `pnpm run db:migrate`，会按**文件名排序**依次应用：先 **A**，再 **B**。
+
+若希望物理上删掉已建表，可在 Dashboard 或 SQL 里手工 `DROP` 后再推（本仓库探测表、会员表多为 `create … if not exists`，重放一般可幂等）。
+
+**生产库、已有业务数据时慎用 `repair`**；优先在空库 / staging 验证，或改用官方建议的 `--include-all` 并评估风险。
 
 ---
 
@@ -58,8 +76,8 @@
 
 ### 4.2 命名与顺序
 
-- 文件名由 CLI 生成：`YYYYMMDDHHMMSS_description.sql`，**禁止手抄**旧时间戳与他人冲突。
-- 合并前拉取最新 `main`，若你的新文件时间戳早于远端已有文件，**重命名或删除后重建**，保证执行顺序全局单调。
+- 文件名前缀由 [`scripts/db-migration-new.mjs`](../scripts/db-migration-new.mjs) 生成：`YYYYMMDDHHMMSS_description.sql`（**东八区墙钟**）。**禁止手抄**时间戳与他人冲突。
+- 合并前拉取最新 `main`；若仍出现「本地新文件时间戳早于远端已应用版本」，见 [**§2.1**](#21-迁移历史纠偏migration-repair空库--可接受重放-ddl-时) `migration repair`，或官方 `db push --include-all`（需自行评估）。
 - **依赖顺序**：被引用表先于外键表；枚举/函数先于依赖它们的 policy。
 
 ### 4.3 SQL 习惯（降低「本地过、线上炸」）
