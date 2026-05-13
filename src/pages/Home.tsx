@@ -58,6 +58,11 @@ export const Home: React.FC = () => {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [historySearchOpen, setHistorySearchOpen] = useState(false);
   const [historySearchQuery, setHistorySearchQuery] = useState("");
+  /** 从档案进入解读页时注入已保存正文与追问，避免重复请求模型 */
+  const [archivePayload, setArchivePayload] = useState<{
+    markdown: string;
+    deepInquiryQuestions?: string[];
+  } | null>(null);
   const canStartDivination = question.trim().length > 0;
 
   const filteredHistory = useMemo(() => {
@@ -119,6 +124,7 @@ export const Home: React.FC = () => {
   };
 
   const handleComplete = (newLines: LineType[]) => {
+    setArchivePayload(null);
     setLines(newLines);
     setTimeout(() => {
       setState("interpretation");
@@ -138,12 +144,19 @@ export const Home: React.FC = () => {
   const handleSelectItem = (item: HistoryItem) => {
     setLines(item.lines);
     setQuestion(item.question);
+    setArchivePayload({
+      markdown: item.interpretation,
+      deepInquiryQuestions: item.deepInquiryQuestions,
+    });
     setState("interpretation");
   };
 
   const goBack = () => {
     if (state === "divination") setState("landing");
-    if (state === "interpretation") setState("divination");
+    if (state === "interpretation") {
+      setArchivePayload(null);
+      setState("divination");
+    }
     if (state === "history") setState("landing");
   };
 
@@ -182,7 +195,10 @@ export const Home: React.FC = () => {
             <motion.div
               whileHover={{ rotate: 180 }}
               transition={{ duration: 0.7 }}
-              onClick={() => setState("landing")}
+              onClick={() => {
+                setQuestion("");
+                setState("landing");
+              }}
               className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-ink font-serif text-sm font-bold text-bg"
             >
               镜
@@ -469,14 +485,19 @@ export const Home: React.FC = () => {
               </div>
               <Interpretation 
                 lines={lines} 
-                question={question} 
-                onSave={(interpretation) => {
+                question={question}
+                cachedMarkdown={archivePayload?.markdown}
+                cachedDeepInquiryQuestions={archivePayload?.deepInquiryQuestions}
+                onSave={({ interpretation: interpretationText, deepInquiryQuestions }) => {
                   saveToHistory({
                     id: Date.now().toString(),
                     timestamp: Date.now(),
                     question,
                     lines,
-                    interpretation
+                    interpretation: interpretationText,
+                    ...(deepInquiryQuestions && deepInquiryQuestions.length === 3
+                      ? { deepInquiryQuestions }
+                      : {}),
                   });
                   toast.success("观心档案已保存");
                 }}

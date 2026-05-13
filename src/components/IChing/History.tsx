@@ -13,6 +13,8 @@ export interface HistoryItem {
   question: string;
   lines: LineType[];
   interpretation: string;
+  /** 保存时的三条深入追问；旧档案可无此字段，打开时用本地兜底文案 */
+  deepInquiryQuestions?: string[];
 }
 
 interface HistoryProps {

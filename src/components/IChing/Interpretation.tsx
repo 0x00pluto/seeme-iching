@@ -14,7 +14,14 @@ import { Hexagram } from "./Hexagram";
 interface InterpretationProps {
   lines: LineType[];
   question?: string;
-  onSave?: (interpretation: string) => void;
+  /** 从档案进入时已保存的全文（含可选「自我觉察」）；有值则不再请求流式解读 */
+  cachedMarkdown?: string;
+  /** 与档案一并保存的三条深入追问；缺失时用本地兜底 */
+  cachedDeepInquiryQuestions?: string[];
+  onSave?: (payload: {
+    interpretation: string;
+    deepInquiryQuestions?: string[];
+  }) => void;
 }
 
 const TABLE_SEPARATOR_REGEX = /\|(?:\s*:?-{3,}:?\s*\|)+/g;
@@ -28,6 +35,18 @@ const FALLBACK_DEEP_INQUIRY: [string, string, string] = [
   "我是不是又回到了某个熟悉的模式？",
   "如果不急着做决定，我现在最需要承认什么？",
 ];
+
+/** 与「保存这次照见」拼接格式一致，用于从档案拆回报告正文与觉察输入框 */
+const SELF_OBSERVATION_SECTION = "\n\n### 自我觉察\n";
+
+function splitSavedMarkdown(full: string): { reportBody: string; reflection: string } {
+  const idx = full.indexOf(SELF_OBSERVATION_SECTION);
+  if (idx === -1) return { reportBody: full, reflection: "" };
+  return {
+    reportBody: full.slice(0, idx),
+    reflection: full.slice(idx + SELF_OBSERVATION_SECTION.length),
+  };
+}
 
 const THINKING_HINTS = [
   "镜面起雾，卦象正在成形…",
@@ -95,7 +114,13 @@ function normalizeMarkdownTables(markdown: string): string {
     .trim();
 }
 
-export const Interpretation: React.FC<InterpretationProps> = ({ lines, question, onSave }) => {
+export const Interpretation: React.FC<InterpretationProps> = ({
+  lines,
+  question,
+  cachedMarkdown,
+  cachedDeepInquiryQuestions,
+  onSave,
+}) => {
   const [interpretation, setInterpretation] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +146,25 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
   const zongGua = HEXAGRAMS[getBinary(zongLines)];
 
   useEffect(() => {
+    if (cachedMarkdown?.trim()) {
+      abortRef.current?.abort();
+      deepInquiryAbortRef.current?.abort();
+      const { reportBody, reflection: savedReflection } = splitSavedMarkdown(cachedMarkdown);
+      setInterpretation(reportBody);
+      setReflection(savedReflection);
+      setIsLoading(false);
+      setError(null);
+      setDeepInquiryLoading(false);
+      const qs =
+        cachedDeepInquiryQuestions && cachedDeepInquiryQuestions.length === 3
+          ? [...cachedDeepInquiryQuestions]
+          : [...FALLBACK_DEEP_INQUIRY];
+      setDeepInquiryQuestions(qs);
+      setHintOffset(0);
+      setHintStep(0);
+      return;
+    }
+
     const fetchInterpretation = async () => {
       abortRef.current?.abort();
       const controller = new AbortController();
@@ -173,7 +217,7 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
     return () => {
       abortRef.current?.abort();
     };
-  }, [lines, question, benGua, huGua, cuoGua, zongGua]);
+  }, [lines, question, benGua, huGua, cuoGua, zongGua, cachedMarkdown, cachedDeepInquiryQuestions]);
 
   useEffect(() => {
     if (!isLoading || interpretation.trim() !== "") return;
@@ -184,6 +228,7 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
   }, [isLoading, interpretation]);
 
   useEffect(() => {
+    if (cachedMarkdown?.trim()) return;
     if (isLoading || error) return;
     const text = interpretation.trim();
     if (!text || text.startsWith("未能生成解读")) return;
@@ -225,7 +270,17 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
     return () => {
       controller.abort();
     };
-  }, [isLoading, error, interpretation, question, benGua, huGua, cuoGua, zongGua]);
+  }, [
+    cachedMarkdown,
+    isLoading,
+    error,
+    interpretation,
+    question,
+    benGua,
+    huGua,
+    cuoGua,
+    zongGua,
+  ]);
 
   const mirrors = [
     { title: "现状之镜", gua: benGua, lines: benLines, icon: Eye, color: "text-ink" },
@@ -435,7 +490,16 @@ export const Interpretation: React.FC<InterpretationProps> = ({ lines, question,
               />
               <Button
                 type="button"
-                onClick={() => onSave?.(interpretation + (reflection ? `\n\n### 自我觉察\n${reflection}` : ""))}
+                onClick={() =>
+                  onSave?.({
+                    interpretation:
+                      interpretation + (reflection ? `${SELF_OBSERVATION_SECTION}${reflection}` : ""),
+                    deepInquiryQuestions:
+                      deepInquiryQuestions && deepInquiryQuestions.length === 3
+                        ? [...deepInquiryQuestions]
+                        : undefined,
+                  })
+                }
                 className={cn(
                   "h-auto min-h-14 w-full rounded-full bg-ink py-6 font-serif text-lg font-bold tracking-widest text-bg shadow-xl shadow-ink/10",
                   "hover:bg-ink/90 hover:opacity-100",
