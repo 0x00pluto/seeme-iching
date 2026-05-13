@@ -20,6 +20,9 @@
 - `pnpm run dev` — 开发（Express + Vite HMR），默认 `http://localhost:3000`
 - `pnpm run build` — 前端构建产出 `dist/`
 - `pnpm run lint` — `tsc --noEmit`
+- `pnpm run db:migration:new -- <name>` — 新建迁移（需先 `supabase link`）
+- `pnpm run db:migration:list` — 查看迁移状态
+- `pnpm run db:migrate` — `supabase db push` 推送到已 link 的远端库
 
 ## 代码入口指路
 

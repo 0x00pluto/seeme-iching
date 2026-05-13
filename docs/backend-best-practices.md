@@ -318,6 +318,8 @@ export const config = {
 
 ## 7. 环境变量与密钥
 
+数据库 **DDL、RLS、`supabase/migrations/`** 与 `pnpm run db:*` 流程见 [supabase-migration-practices.md](./supabase-migration-practices.md)。
+
 ### 7.1 服务端独占变量
 
 | 变量 | 用途 | 在哪配 |

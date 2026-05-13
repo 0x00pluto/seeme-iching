@@ -10,7 +10,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "db:migration:new": "supabase migration new",
+    "db:migration:list": "supabase migration list",
+    "db:migrate": "supabase db push"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.8",

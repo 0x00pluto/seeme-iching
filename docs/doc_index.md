@@ -13,6 +13,7 @@
 | 你在做什么 | 打开 |
 |------------|------|
 | 后端 API、AI Prompt、方舟调用、SSE、密钥、`ARK_*`、Express / Vercel 双运行时、部署与路由 | [backend-best-practices.md](./backend-best-practices.md) |
+| **Supabase** migration / DDL / RLS / `supabase link` / `pnpm run db:*` | [supabase-migration-practices.md](./supabase-migration-practices.md) |
 | 仅排查 **线上 SSE 断连**（`ERR_CONNECTION_CLOSED`、Vercel 与本地不一致） | [faqs/how-to-fix-vercel-sse-connection-closed.md](./faqs/how-to-fix-vercel-sse-connection-closed.md) |
 | 前端页面与组件、React/Vite/Tailwind、同源 SSE 消费、localStorage | [frontend-best-practices.md](./frontend-best-practices.md) |
 | 仅需要仓库一句话定位 | [`AGENTS.md`](../AGENTS.md) |
@@ -22,6 +23,10 @@
 ### [backend-best-practices.md](./backend-best-practices.md)
 
 后端落地指南：**双运行时**（本地 `server.ts` / Vercel `api/*`）与 [`server/ark-api.ts`](../server/ark-api.ts) 共享业务，SSE 流式、密钥与观测性、**Vercel 按文件路径映射路由**等 Do/Don't，附代码引用。
+
+### [supabase-migration-practices.md](./supabase-migration-practices.md)
+
+**数据库 schema 生命周期**：`supabase/migrations/` 单一事实源、`pnpm run db:migration:*` / `db:migrate`、RLS 与 `connectivity_check` 示例、PR 自检清单；与后端文档 §7 环境变量交叉引用。
 
 ### [frontend-best-practices.md](./frontend-best-practices.md)
 
@@ -38,6 +43,7 @@
 | 主题 | 位置 |
 |------|------|
 | 环境变量（`ARK_API_KEY`、`ARK_BASE_URL`、`ARK_MODEL` 等） | [backend-best-practices.md §7](./backend-best-practices.md#7-环境变量与密钥) |
+| Supabase migration、`pnpm run db:*`、`supabase link`、RLS / DDL 约定 | [supabase-migration-practices.md](./supabase-migration-practices.md) |
 | `POST /api/interpret`、`/api/chat` 及共享实现位置 | [backend-best-practices.md](./backend-best-practices.md)（§1 架构、§2 双运行时） |
 | Vercel `api/foo/bar.ts` → `/api/foo/bar` 路由约定 | [backend-best-practices.md §3](./backend-best-practices.md#3-vercel-文件路由约定) |
 | 线上 SSE 断连、空 delta 保活、`SSE_PERIODIC_PING_MS` | [faqs/how-to-fix-vercel-sse-connection-closed.md](./faqs/how-to-fix-vercel-sse-connection-closed.md) |
