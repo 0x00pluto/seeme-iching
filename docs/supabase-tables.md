@@ -15,6 +15,30 @@ Schema 变更的唯一来源：[`supabase/migrations/`](../supabase/migrations/)
 
 ---
 
+## `app_config_kv`
+
+服务端可调参数：**一行一键**，`config_value` 为 **jsonb**；与业务事实表分离，便于运营 / 管理后台改数而不改代码。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `config_key` | `text` | 主键；**点分命名空间**，全小写（例：`interpret.daily_quota`） |
+| `config_value` | `jsonb` | 该键负载；**结构由 key 约定**（见下表） |
+| `updated_at` | `timestamptz` | 默认 `now()` |
+
+**RLS**：已开启，**无 policy**；仅 [`server/supabase-client.ts`](../server/supabase-client.ts) **`service_role`** 读写。
+
+### 已约定 `config_key` 与 JSON 形态
+
+| `config_key` | `config_value` schema | 消费方 |
+|--------------|----------------------|--------|
+| `interpret.daily_quota` | `{"free_daily_limit": number, "standard_daily_limit": number}`；缺键或非数字字符串时 RPC 回退 **3 / 100** | `consume_interpret_quota`、`get_interpret_entitlements_snapshot` |
+
+**种子**：migration 写入 `interpret.daily_quota` 默认 `3` / `100`（与历史硬编码一致）。
+
+**扩展**：新增可调项时优先 **新 `config_key` + 新 JSON**（例如 `membership.standard_default_duration_days`）；多 SKU / 订单等关系型数据再单独建表。
+
+---
+
 ## `connectivity_check`
 
 双运行时（本地 + 托管）健康探测用；无用户 PII。
@@ -36,16 +60,16 @@ Schema 变更的唯一来源：[`supabase/migrations/`](../supabase/migrations/)
 | `user_id` | `uuid` | 主键；外键 → `auth.users(id)`，`ON DELETE CASCADE` |
 | `activated_at` | `timestamptz` | 建档/开通相关时间；新用户触发器写入 `coalesce(auth.users.created_at, now())` |
 | `expires_at` | `timestamptz` | **可空**。免费档为 **`NULL`**；付费有效为到期时刻（`NOT NULL` 且 `> now()`） |
-| `tier` | `text` | 默认 **`free`**；付费档当前为 **`standard`**（与 RPC 中日限额 100 对齐） |
+| `tier` | `text` | 默认 **`free`**；付费档当前为 **`standard`**（有效时日上限见 **`app_config_kv`** `interpret.daily_quota`） |
 | `updated_at` | `timestamptz` | 默认 `now()` |
 
 **状态约定**：
 
 | 状态 | `tier` | `expires_at` | 主解读日限额 |
 |------|--------|----------------|--------------|
-| 免费（默认） | `free` | `NULL` | 3 |
-| 付费有效 | `standard` | `NOT NULL` 且 `> now()` | 100 |
-| 付费已过期 | 可仍为 `standard` | `<= now()` | 3（库内可保留 `standard` 便于审计；API 对外 `tierCode` 视为 `free`） |
+| 免费（默认） | `free` | `NULL` | `interpret.daily_quota` → `free_daily_limit`（默认 **3**） |
+| 付费有效 | `standard` | `NOT NULL` 且 `> now()` | 同上 → `standard_daily_limit`（默认 **100**） |
+| 付费已过期 | 可仍为 `standard` | `<= now()` | 同免费档（库内可保留 `standard` 便于审计；API 对外 `tierCode` 视为 `free`） |
 
 **新用户**：`AFTER INSERT ON auth.users` 触发器 `public.handle_auth_user_membership()` 自动插入一行 `tier='free'`, `expires_at=NULL`（`ON CONFLICT DO NOTHING`）。
 
@@ -124,10 +148,10 @@ join public.user_membership m on m.user_id = u.id;
 
 在**未超日限额**时原子递增当日 `request_count`；用于解读流**开始前**扣次。
 
-**日限额**：
+**日限额**：读取 **`app_config_kv`** 中 `config_key = 'interpret.daily_quota'` 的 `config_value`（字段 `free_daily_limit` / `standard_daily_limit`）；键缺失或非法时回退 **3 / 100**。
 
-- `tier = 'standard'` **且** `expires_at IS NOT NULL` **且** `expires_at > now()` → **100** 次 / 东八区日；
-- 若 `user_membership` 行缺失（不应发生）或上述不满足 → **3** 次 / 东八区日。
+- `tier = 'standard'` **且** `expires_at IS NOT NULL` **且** `expires_at > now()` → `standard_daily_limit`；
+- 若 `user_membership` 行缺失（不应发生）或上述不满足 → `free_daily_limit`。
 
 **返回字段（JSON）**：
 
