@@ -77,6 +77,7 @@
 ### 4.2 命名与顺序
 
 - 文件名前缀由 [`scripts/db-migration-new.mjs`](../scripts/db-migration-new.mjs) 生成：`YYYYMMDDHHMMSS_description.sql`（**东八区墙钟**）。**禁止手抄**时间戳与他人冲突。
+- **`public` 内表 / 视图对象名**（`create table` 等）：见 [`docs/supabase-tables.md`](./supabase-tables.md) 开篇「表命名约定」，与既有 `interpret_*`、`user_*` 等域前缀保持一致。
 - 合并前拉取最新 `main`；若仍出现「本地新文件时间戳早于远端已应用版本」，见 [**§2.1**](#21-迁移历史纠偏migration-repair空库--可接受重放-ddl-时) `migration repair`，或官方 `db push --include-all`（需自行评估）。
 - **依赖顺序**：被引用表先于外键表；枚举/函数先于依赖它们的 policy。
 

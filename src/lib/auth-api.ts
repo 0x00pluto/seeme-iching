@@ -29,6 +29,8 @@ export type AuthMeResponse = {
   entitlements?: Entitlements | null;
   /** false：服务端未配置 SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY，不做额度 RPC */
   quotaBackendConfigured?: boolean;
+  /** 与额度同源：service_role 可写 `interpret_saved_report`；缺省时可用 quotaBackendConfigured */
+  archivesBackendConfigured?: boolean;
   error?: string;
   detail?: string;
 };

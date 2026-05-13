@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LineType } from "@/lib/iching";
+import { clearArchives, fetchArchives, postArchive } from "@/lib/archives-api";
 import { fetchAuthMe, postLogout, type AuthUser, type Entitlements } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
 import {
@@ -41,8 +42,6 @@ function initialFromEmail(email: string): string {
   return ch.toLocaleUpperCase("en-US");
 }
 
-const HISTORY_STORAGE_KEY = "iching_history";
-
 type AppState = "landing" | "divination" | "interpretation" | "history";
 
 export const Home: React.FC = () => {
@@ -54,6 +53,8 @@ export const Home: React.FC = () => {
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   /** 与 /api/auth/me 的 quotaBackendConfigured 对齐；undefined 表示未登录或未拉取 */
   const [quotaBackendConfigured, setQuotaBackendConfigured] = useState<boolean | undefined>(undefined);
+  /** 与 /api/auth/me 的 archivesBackendConfigured 对齐；缺省时等同 quota */
+  const [archivesBackendConfigured, setArchivesBackendConfigured] = useState<boolean | undefined>(undefined);
   const [quotaEntitlementsError, setQuotaEntitlementsError] = useState<string | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -64,7 +65,13 @@ export const Home: React.FC = () => {
     markdown: string;
     deepInquiryQuestions?: string[];
   } | null>(null);
+  /** 新一次测算→解读的幂等键，随 handleComplete 生成 */
+  const [interpretClientSessionId, setInterpretClientSessionId] = useState<string | null>(null);
+  /** 从档案点入时用于 DeepDialogue 锚定与 fromArchive */
+  const [selectedArchiveItemId, setSelectedArchiveItemId] = useState<string | null>(null);
   const canStartDivination = question.trim().length > 0;
+
+  const archivesRemote = Boolean(authUser && archivesBackendConfigured);
 
   const filteredHistory = useMemo(() => {
     const q = historySearchQuery.trim().toLowerCase();
@@ -97,39 +104,49 @@ export const Home: React.FC = () => {
     };
   }, [entitlements]);
 
-  useEffect(() => {
-    const savedHistory = localStorage.getItem(HISTORY_STORAGE_KEY);
-    if (!savedHistory) return;
-    try {
-      setHistory(JSON.parse(savedHistory));
-    } catch (e) {
-      console.error("Failed to load local history", e);
-    }
-  }, []);
-
   const refreshAuth = useCallback(async () => {
     try {
       const data = await fetchAuthMe();
       setAuthUser(data.user);
       setEntitlements(data.entitlements ?? null);
+      const archivesConfigured = Boolean(
+        data.archivesBackendConfigured ?? data.quotaBackendConfigured,
+      );
       if (data.user) {
         if (data.ok) {
           setQuotaBackendConfigured(data.quotaBackendConfigured);
+          setArchivesBackendConfigured(archivesConfigured);
           setQuotaEntitlementsError(null);
         } else {
           setQuotaBackendConfigured(data.quotaBackendConfigured ?? true);
+          setArchivesBackendConfigured(archivesConfigured);
           const msg = [data.error, data.detail].filter(Boolean).join("：") || "权益接口异常";
           setQuotaEntitlementsError(msg);
         }
+        if (archivesConfigured) {
+          try {
+            const { items } = await fetchArchives();
+            setHistory(items);
+          } catch (e) {
+            console.error("fetchArchives", e);
+            setHistory([]);
+          }
+        } else {
+          setHistory([]);
+        }
       } else {
         setQuotaBackendConfigured(undefined);
+        setArchivesBackendConfigured(undefined);
         setQuotaEntitlementsError(null);
+        setHistory([]);
       }
     } catch {
       setAuthUser(null);
       setEntitlements(null);
       setQuotaBackendConfigured(undefined);
+      setArchivesBackendConfigured(undefined);
       setQuotaEntitlementsError(null);
+      setHistory([]);
     }
   }, []);
 
@@ -148,20 +165,60 @@ export const Home: React.FC = () => {
     }
   }, [state]);
 
-  const saveToHistory = async (item: HistoryItem) => {
-    const newHistory = [item, ...history];
-    setHistory(newHistory);
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(newHistory));
-  };
+  const persistArchive = useCallback(
+    async (payload: { interpretation: string; deepInquiryQuestions?: string[] }) => {
+      if (!authUser) {
+        toast.message("请先登录后再保存观心档案");
+        throw new Error("未登录");
+      }
+      if (!archivesBackendConfigured) {
+        toast.error("观心档案服务未配置，暂无法保存");
+        throw new Error("档案服务未配置");
+      }
+      if (!interpretClientSessionId) {
+        toast.error("会话无效，请返回重新测算后再保存");
+        throw new Error("缺少 client_session_id");
+      }
+      const item = await postArchive({
+        client_session_id: interpretClientSessionId,
+        question,
+        lines,
+        interpretation: payload.interpretation,
+        ...(payload.deepInquiryQuestions && payload.deepInquiryQuestions.length === 3
+          ? { deep_inquiry_questions: payload.deepInquiryQuestions }
+          : {}),
+      });
+      setHistory((prev) => {
+        if (prev.some((h) => h.id === item.id)) return prev;
+        return [item, ...prev];
+      });
+      toast.success("观心档案已保存");
+    },
+    [authUser, archivesBackendConfigured, interpretClientSessionId, question, lines],
+  );
 
   const clearHistory = async () => {
-    setHistory([]);
-    localStorage.removeItem(HISTORY_STORAGE_KEY);
-    toast.success("本地档案已清空");
+    if (!authUser) {
+      toast.message("请先登录后再管理观心档案");
+      return;
+    }
+    if (!archivesBackendConfigured) {
+      toast.error("观心档案服务未配置，暂无法清空");
+      return;
+    }
+    try {
+      await clearArchives();
+      setHistory([]);
+      toast.success("观心档案已清空");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "清空失败");
+    }
   };
 
   const handleComplete = (newLines: LineType[]) => {
     setArchivePayload(null);
+    setSelectedArchiveItemId(null);
+    setInterpretClientSessionId(crypto.randomUUID());
     setLines(newLines);
     setTimeout(() => {
       setState("interpretation");
@@ -181,6 +238,8 @@ export const Home: React.FC = () => {
   const handleSelectItem = (item: HistoryItem) => {
     setLines(item.lines);
     setQuestion(item.question);
+    setInterpretClientSessionId(null);
+    setSelectedArchiveItemId(item.id);
     setArchivePayload({
       markdown: item.interpretation,
       deepInquiryQuestions: item.deepInquiryQuestions,
@@ -192,6 +251,8 @@ export const Home: React.FC = () => {
     if (state === "divination") setState("landing");
     if (state === "interpretation") {
       setArchivePayload(null);
+      setSelectedArchiveItemId(null);
+      setInterpretClientSessionId(null);
       setState("divination");
     }
     if (state === "history") setState("landing");
@@ -202,7 +263,11 @@ export const Home: React.FC = () => {
     setAuthUser(null);
     setEntitlements(null);
     setQuotaBackendConfigured(undefined);
+    setArchivesBackendConfigured(undefined);
     setQuotaEntitlementsError(null);
+    setInterpretClientSessionId(null);
+    setSelectedArchiveItemId(null);
+    setHistory([]);
     toast.success("已退出登录");
   };
 
@@ -583,24 +648,14 @@ export const Home: React.FC = () => {
                 </button>
                 <div className="text-[10px] text-brand font-serif tracking-[0.3em] uppercase">观心报告 · 正在呈现</div>
               </div>
-              <Interpretation 
-                lines={lines} 
+              <Interpretation
+                lines={lines}
                 question={question}
+                dialogueAnchorId={selectedArchiveItemId ?? interpretClientSessionId ?? "reading_pending"}
+                fromArchive={Boolean(selectedArchiveItemId)}
                 cachedMarkdown={archivePayload?.markdown}
                 cachedDeepInquiryQuestions={archivePayload?.deepInquiryQuestions}
-                onSave={({ interpretation: interpretationText, deepInquiryQuestions }) => {
-                  saveToHistory({
-                    id: Date.now().toString(),
-                    timestamp: Date.now(),
-                    question,
-                    lines,
-                    interpretation: interpretationText,
-                    ...(deepInquiryQuestions && deepInquiryQuestions.length === 3
-                      ? { deepInquiryQuestions }
-                      : {}),
-                  });
-                  toast.success("观心档案已保存");
-                }}
+                onSave={persistArchive}
               />
             </motion.section>
           )}
@@ -617,6 +672,7 @@ export const Home: React.FC = () => {
                 items={filteredHistory}
                 allItemsCount={history.length}
                 deepInquirySavedCount={deepInquirySavedCount}
+                archivesRemote={archivesRemote}
                 onSelectItem={handleSelectItem}
                 onClear={clearHistory}
                 onStartCasting={() => setState("landing")}
@@ -641,7 +697,7 @@ export const Home: React.FC = () => {
               搜索档案
             </DialogTitle>
             <DialogDescription className="font-serif text-ink/50">
-              按问题或解读内容筛选本地记录
+              按问题或解读内容筛选记录
             </DialogDescription>
           </DialogHeader>
           <Input

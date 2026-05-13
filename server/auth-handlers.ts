@@ -136,6 +136,7 @@ export async function handleMe(cookieHeader: string | undefined): Promise<{
         ...base,
         entitlements: null,
         quotaBackendConfigured: false,
+        archivesBackendConfigured: false,
       },
     };
   }
@@ -143,7 +144,12 @@ export async function handleMe(cookieHeader: string | undefined): Promise<{
     const entitlements = await fetchEntitlementsPayload(session.sub);
     return {
       status: 200,
-      json: { ...base, entitlements, quotaBackendConfigured: true },
+      json: {
+        ...base,
+        entitlements,
+        quotaBackendConfigured: true,
+        archivesBackendConfigured: true,
+      },
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -154,6 +160,7 @@ export async function handleMe(cookieHeader: string | undefined): Promise<{
         detail: msg,
         user: base.user,
         quotaBackendConfigured: true,
+        archivesBackendConfigured: true,
       },
     };
   }

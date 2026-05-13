@@ -4,6 +4,15 @@
 
 Schema 变更的唯一来源：[`supabase/migrations/`](../supabase/migrations/)。流程见 [`docs/supabase-migration-practices.md`](./supabase-migration-practices.md)。
 
+### 表命名约定（`public`）
+
+- 一律 **`snake_case`**，多个单词用下划线连接。
+- **域前缀**（新表优先对齐其一，便于按业务浏览与联表）：
+  - **`interpret_*`**：与主解读流、额度、已保存解读等同一产品域（例如 `interpret_usage_daily`、`interpret_saved_report`）。
+  - **`user_*`**：与用户强绑定、常作配置或 1:1 维度的表（例如 `user_membership`）。
+  - **`app_*`** 或**无前缀但语义稳定**：极少数跨域/运维类表（历史存量如 `connectivity_check` 可保留原名，避免无收益重命名迁移）。
+- 后缀尽量表达**实体或用途**（如 `_daily` 表按日分桶、`_report` 表单条业务记录），避免缩写晦涩。
+
 ---
 
 ## `connectivity_check`
@@ -80,6 +89,29 @@ join public.user_membership m on m.user_id = u.id;
 
 ---
 
+## `interpret_saved_report`
+
+用户通过前端「保存这次照见」写入的**观心解读全文**（含可选「自我觉察」Markdown 与三条深入追问）；与 `interpret_*` 域其它表一致，由服务端 `service_role` 访问。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | `uuid` | 主键；默认 `gen_random_uuid()` |
+| `user_id` | `uuid` | 外键 → `auth.users(id)`，`ON DELETE CASCADE` |
+| `client_session_id` | `text` | 客户端生成的幂等键（单次照见会话）；与 `user_id` 组成唯一约束 |
+| `question` | `text` | 起卦时的困惑/意念 |
+| `lines` | `jsonb` | 六爻 `LineType[]` 序列化 |
+| `interpretation` | `text` | 完整解读 Markdown |
+| `deep_inquiry_questions` | `jsonb` | 可空；非空时为长度 3 的字符串数组 |
+| `saved_at` | `timestamptz` | 保存时间，默认 `now()` |
+
+**唯一约束**：`(user_id, client_session_id)`，保证同一会话至多一条已保存记录。
+
+**索引**：`(user_id, saved_at desc)`，供按用户列表倒序查询。
+
+**HTTP**：`GET/POST /api/archives`、`DELETE /api/archives`（清空）、`DELETE /api/archives/:id`（单条）；同源 Cookie 会话，服务端 `service_role` 读写本表。
+
+---
+
 ## 数据库函数（RPC）
 
 仅授予 **`service_role`** 执行（见 migration 中 `GRANT EXECUTE`）。前端不直连；由 [`server/membership-quota.ts`](../server/membership-quota.ts) 调用。
@@ -123,5 +155,5 @@ HTTP 层可将 `tierCode` 映射为展示名（见 `membership-quota.ts`）。
 
 ## 与 `auth.users` 的关系
 
-- `user_membership.user_id`、`interpret_usage_daily.user_id` 均引用 **`auth.users`**。
+- `user_membership.user_id`、`interpret_usage_daily.user_id`、`interpret_saved_report.user_id` 均引用 **`auth.users`**。
 - 会话 Cookie 中的 `sub` 与 **`auth.users.id`** 一致；`user_membership` 与之一一对应。

@@ -8,12 +8,17 @@ import { BookOpen, Compass, Eye, Ghost, Heart, Loader2, Share2 } from "lucide-re
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { toast } from "sonner";
 import { DeepDialogue } from "./DeepDialogue";
 import { Hexagram } from "./Hexagram";
 
 interface InterpretationProps {
   lines: LineType[];
   question?: string;
+  /** 与深入追问本地缓存、DeepDialogue 锚定一致；新解读为 client_session_id，从档案进入为档案 id */
+  dialogueAnchorId: string;
+  /** 从档案进入：只读已保存内容，不提供再次保存 */
+  fromArchive?: boolean;
   /** 从档案进入时已保存的全文（含可选「自我觉察」）；有值则不再请求流式解读 */
   cachedMarkdown?: string;
   /** 与档案一并保存的三条深入追问；缺失时用本地兜底 */
@@ -21,7 +26,7 @@ interface InterpretationProps {
   onSave?: (payload: {
     interpretation: string;
     deepInquiryQuestions?: string[];
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 const TABLE_SEPARATOR_REGEX = /\|(?:\s*:?-{3,}:?\s*\|)+/g;
@@ -133,6 +138,8 @@ function normalizeMarkdownTables(markdown: string): string {
 export const Interpretation: React.FC<InterpretationProps> = ({
   lines,
   question,
+  dialogueAnchorId,
+  fromArchive = false,
   cachedMarkdown,
   cachedDeepInquiryQuestions,
   onSave,
@@ -145,11 +152,17 @@ export const Interpretation: React.FC<InterpretationProps> = ({
   const [selectedDirection, setSelectedDirection] = useState<string | null>(null);
   const [deepInquiryQuestions, setDeepInquiryQuestions] = useState<string[] | null>(null);
   const [deepInquiryLoading, setDeepInquiryLoading] = useState(false);
-  const [readingSessionId] = useState(() => `reading_${Date.now()}`);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveDone, setSaveDone] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const deepInquiryAbortRef = useRef<AbortController | null>(null);
   const [hintOffset, setHintOffset] = useState(0);
   const [hintStep, setHintStep] = useState(0);
+
+  useEffect(() => {
+    setSaveDone(false);
+    setSaveLoading(false);
+  }, [dialogueAnchorId, cachedMarkdown]);
 
   const benLines = lines;
   const huLines = getHuGuaLines(lines);
@@ -350,8 +363,8 @@ export const Interpretation: React.FC<InterpretationProps> = ({
       <AnimatePresence>
         {showDialogue && (
           <DeepDialogue
-            key={`${readingSessionId}-${selectedDirection ?? "open"}`}
-            divinationId={readingSessionId}
+            key={`${dialogueAnchorId}-${selectedDirection ?? "open"}`}
+            divinationId={dialogueAnchorId}
             question={question || "未提供具体问题"}
             interpretation={interpretation}
             direction={selectedDirection ?? undefined}
@@ -506,39 +519,72 @@ export const Interpretation: React.FC<InterpretationProps> = ({
             <div className="flex min-h-0 flex-col gap-5">
               <div>
                 <h4 className="font-serif text-2xl font-bold text-ink">自我觉察</h4>
-                <p className="mt-1 text-xs font-serif text-ink/40">把你此刻的回响留在这里，作为对话的补充。</p>
+                <p className="mt-1 text-xs font-serif text-ink/40">
+                  {fromArchive
+                    ? "本条为已保存的观心档案，可在此重温；若需新的照见请从首页再起一卦。"
+                    : "把你此刻的回响留在这里，作为对话的补充。"}
+                </p>
               </div>
               <Textarea
                 placeholder="在此写下你的觉察..."
                 value={reflection}
                 onChange={(e) => setReflection(e.target.value)}
+                readOnly={fromArchive}
                 rows={8}
                 className={cn(
                   "min-h-[12rem] w-full flex-1 resize-y rounded-[28px] border-ink/10 bg-white/30 p-6 font-serif text-lg leading-relaxed",
                   "placeholder:text-ink/10",
-                  "focus-visible:border-brand/30 focus-visible:ring-brand/20"
+                  "focus-visible:border-brand/30 focus-visible:ring-brand/20",
+                  fromArchive && "cursor-default bg-white/20 text-ink/70"
                 )}
               />
-              <Button
-                type="button"
-                onClick={() =>
-                  onSave?.({
-                    interpretation:
-                      interpretation + (reflection ? `${SELF_OBSERVATION_SECTION}${reflection}` : ""),
-                    deepInquiryQuestions:
-                      deepInquiryQuestions && deepInquiryQuestions.length === 3
-                        ? [...deepInquiryQuestions]
-                        : undefined,
-                  })
-                }
-                className={cn(
-                  "h-auto min-h-14 w-full rounded-full bg-ink py-6 font-serif text-lg font-bold tracking-widest text-bg shadow-xl shadow-ink/10",
-                  "hover:bg-ink/90 hover:opacity-100",
-                  "focus-visible:ring-brand/40"
-                )}
-              >
-                保存这次照见
-              </Button>
+              {!fromArchive ? (
+                <Button
+                  type="button"
+                  disabled={saveLoading || saveDone}
+                  onClick={async () => {
+                    if (!onSave) return;
+                    setSaveLoading(true);
+                    try {
+                      await onSave({
+                        interpretation:
+                          interpretation + (reflection ? `${SELF_OBSERVATION_SECTION}${reflection}` : ""),
+                        deepInquiryQuestions:
+                          deepInquiryQuestions && deepInquiryQuestions.length === 3
+                            ? [...deepInquiryQuestions]
+                            : undefined,
+                      });
+                      setSaveDone(true);
+                    } catch (e) {
+                      const msg = e instanceof Error ? e.message : "保存失败";
+                      toast.error(msg);
+                    } finally {
+                      setSaveLoading(false);
+                    }
+                  }}
+                  className={cn(
+                    "h-auto min-h-14 w-full rounded-full bg-ink py-6 font-serif text-lg font-bold tracking-widest text-bg shadow-xl shadow-ink/10",
+                    "hover:bg-ink/90 hover:opacity-100",
+                    "focus-visible:ring-brand/40",
+                    (saveLoading || saveDone) && "pointer-events-none opacity-70"
+                  )}
+                >
+                  {saveLoading ? (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <Loader2 className="animate-spin" size={22} aria-hidden />
+                      保存中…
+                    </span>
+                  ) : saveDone ? (
+                    "已保存"
+                  ) : (
+                    "保存这次照见"
+                  )}
+                </Button>
+              ) : (
+                <p className="rounded-full border border-ink/10 bg-white/40 px-6 py-4 text-center font-serif text-sm text-ink/45">
+                  本条已在观心档案中
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col justify-between gap-8 lg:pt-1">

@@ -39,10 +39,12 @@ function interpretationPreview(raw: string): string {
 
 interface HistoryProps {
   items: HistoryItem[];
-  /** 本地档案总数（未过滤）；用于区分「从未有档案」与「搜索无结果」 */
+  /** 档案总数（未过滤）；用于区分「从未有档案」与「搜索无结果」 */
   allItemsCount: number;
   /** 全部档案中含已保存「深入追问」的条数（由父组件从完整 history 计算） */
   deepInquirySavedCount: number;
+  /** 为 true 时表示当前已登录且档案服务（Supabase）可用，数据来自云端 */
+  archivesRemote?: boolean;
   onSelectItem: (item: HistoryItem) => void;
   onClear: () => void;
   onStartCasting?: () => void;
@@ -53,6 +55,7 @@ export const History: React.FC<HistoryProps> = ({
   items,
   allItemsCount,
   deepInquirySavedCount,
+  archivesRemote = false,
   onSelectItem,
   onClear,
   onStartCasting,
@@ -140,7 +143,9 @@ export const History: React.FC<HistoryProps> = ({
             <p className="font-serif text-sm leading-relaxed text-ink/40">
               {listFiltered
                 ? `当前列表显示 ${items.length} 条，与搜索条件匹配。`
-                : "记录保存在本机浏览器，可随时回看、对照心境变化。"}
+                : archivesRemote
+                  ? "记录保存在你的登录账号下，换设备登录同一邮箱可继续回看。"
+                  : "登录且档案服务就绪后，观心记录将保存在你的账号下。"}
             </p>
           </div>
           <div className="grid shrink-0 grid-cols-2 gap-4 sm:min-w-[280px]">

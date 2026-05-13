@@ -19,6 +19,12 @@ import {
   handleMe,
 } from "./server/auth-handlers.js";
 import { consumeInterpretQuota, isQuotaBackendConfigured } from "./server/membership-quota.js";
+import {
+  handleArchivesDeleteAll,
+  handleArchivesDeleteOne,
+  handleArchivesGet,
+  handleArchivesPost,
+} from "./server/archives-handlers.js";
 import { requireAuth, UNAUTHORIZED_RESPONSE } from "./server/require-auth.js";
 import { appendSessionCookie, appendClearSessionCookie } from "./server/user-session-cookie.js";
 import { buildAuthCallbackUrl, resolvePublicOrigin } from "./server/public-origin.js";
@@ -53,6 +59,42 @@ async function startServer() {
 
   app.get("/api/auth/me", async (req, res) => {
     const result = await handleMe(req.headers.cookie);
+    res.status(result.status).json(result.json);
+  });
+
+  app.get("/api/archives", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const result = await handleArchivesGet(req.headers.cookie);
+    res.status(result.status).json(result.json);
+  });
+
+  app.post("/api/archives", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const result = await handleArchivesPost(req.headers.cookie, req.body);
+    res.status(result.status).json(result.json);
+  });
+
+  app.delete("/api/archives", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const result = await handleArchivesDeleteAll(req.headers.cookie);
+    res.status(result.status).json(result.json);
+  });
+
+  app.delete("/api/archives/:id", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const result = await handleArchivesDeleteOne(req.headers.cookie, req.params.id ?? "");
     res.status(result.status).json(result.json);
   });
 
