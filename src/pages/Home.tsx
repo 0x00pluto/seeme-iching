@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Divination } from "@/components/IChing/Divination";
 import { Interpretation } from "@/components/IChing/Interpretation";
@@ -8,9 +8,11 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { LineType } from "@/lib/iching";
 import { fetchAuthMe, postLogout, type AuthUser } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
@@ -21,6 +23,7 @@ import {
   ArrowLeft,
   LogIn,
   MoreVertical,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,7 +56,19 @@ export const Home: React.FC = () => {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [historySearchOpen, setHistorySearchOpen] = useState(false);
+  const [historySearchQuery, setHistorySearchQuery] = useState("");
   const canStartDivination = question.trim().length > 0;
+
+  const filteredHistory = useMemo(() => {
+    const q = historySearchQuery.trim().toLowerCase();
+    if (!q) return history;
+    return history.filter(
+      (item) =>
+        item.question.toLowerCase().includes(q) ||
+        item.interpretation.toLowerCase().includes(q)
+    );
+  }, [history, historySearchQuery]);
 
   const tierLabel = SUBSCRIPTION_TIER === "free" ? "免费" : "PRO";
 
@@ -83,6 +98,13 @@ export const Home: React.FC = () => {
   useEffect(() => {
     if (!authUser) setAccountMenuOpen(false);
   }, [authUser]);
+
+  useEffect(() => {
+    if (state !== "history") {
+      setHistorySearchQuery("");
+      setHistorySearchOpen(false);
+    }
+  }, [state]);
 
   const saveToHistory = async (item: HistoryItem) => {
     const newHistory = [item, ...history];
@@ -135,26 +157,51 @@ export const Home: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-bg text-ink selection:bg-brand/10 selection:text-brand">
       {/* Toaster is in App.tsx */}
       
-      <header className="flex justify-between items-center px-8 py-6 border-b border-ink/5 sticky top-0 bg-bg/80 backdrop-blur-md z-50">
-        <div className="flex items-center gap-3">
-          <motion.div 
-            whileHover={{ rotate: 180 }}
-            transition={{ duration: 0.7 }}
-            onClick={() => setState("landing")}
-            className="w-8 h-8 rounded-full bg-ink flex items-center justify-center text-bg font-serif text-sm font-bold cursor-pointer"
-          >
-            镜
-          </motion.div>
-          <h1 className="text-xl font-serif font-bold tracking-widest text-ink/80">镜微 · I-CHING</h1>
-        </div>
-        
-        <nav className="flex items-center gap-6 sm:gap-8">
+      <header className="flex justify-between items-center gap-4 px-8 py-6 border-b border-ink/5 sticky top-0 bg-bg/80 backdrop-blur-md z-50">
+        {state === "history" ? (
+          <div className="flex min-w-0 flex-1 items-center gap-4 sm:gap-6">
+            <button
+              type="button"
+              onClick={goBack}
+              aria-label="返回"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-ink/5 text-ink/40 transition-colors hover:bg-white hover:text-ink"
+            >
+              <ArrowLeft size={20} strokeWidth={2} aria-hidden />
+            </button>
+            <div className="min-w-0">
+              <h1 className="truncate font-serif text-xl font-bold text-ink">
+                我的内省足迹
+              </h1>
+              <p className="text-[10px] font-serif uppercase tracking-[0.3em] text-ink/20">
+                MY INTROSPECTION FOOTPRINTS
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <motion.div
+              whileHover={{ rotate: 180 }}
+              transition={{ duration: 0.7 }}
+              onClick={() => setState("landing")}
+              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-ink font-serif text-sm font-bold text-bg"
+            >
+              镜
+            </motion.div>
+            <h1 className="font-serif text-xl font-bold tracking-widest text-ink/80">
+              镜微 · I-CHING
+            </h1>
+          </div>
+        )}
+
+        <nav className="flex shrink-0 items-center gap-4 sm:gap-6">
           {authUser && (
             <button
               onClick={() => setState("history")}
               className={cn(
-                "text-xs font-serif tracking-widest uppercase flex items-center gap-2 transition-colors",
-                state === "history" ? "text-brand" : "text-ink/40 hover:text-ink/80"
+                "flex items-center gap-2 font-serif text-xs tracking-widest uppercase transition-colors",
+                state === "history"
+                  ? "text-brand"
+                  : "text-ink/40 hover:text-ink/80"
               )}
             >
               <HistoryIcon size={14} />
@@ -163,7 +210,17 @@ export const Home: React.FC = () => {
           )}
           {authUser ? (
             <>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 sm:gap-4">
+                {state === "history" && (
+                  <button
+                    type="button"
+                    aria-label="搜索档案"
+                    onClick={() => setHistorySearchOpen(true)}
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-ink/5 text-ink/20 transition-colors hover:bg-white hover:text-ink"
+                  >
+                    <Search size={20} strokeWidth={2} aria-hidden />
+                  </button>
+                )}
                 <button
                   type="button"
                   aria-label="更多选项"
@@ -433,21 +490,15 @@ export const Home: React.FC = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="max-w-5xl mx-auto py-20 px-8"
+              className="mx-auto max-w-5xl px-8 py-12"
             >
-              <div className="mb-12">
-                <button 
-                  onClick={goBack}
-                  className="flex items-center gap-2 text-xs text-ink/30 hover:text-ink/60 transition-colors font-serif tracking-widest uppercase"
-                >
-                  <ArrowLeft size={14} />
-                  <span>返回</span>
-                </button>
-              </div>
-              <History 
-                items={history} 
+              <History
+                items={filteredHistory}
+                allItemsCount={history.length}
                 onSelectItem={handleSelectItem}
                 onClear={clearHistory}
+                onStartCasting={() => setState("landing")}
+                onClearSearch={() => setHistorySearchQuery("")}
               />
             </motion.section>
           )}
@@ -455,6 +506,41 @@ export const Home: React.FC = () => {
       </main>
 
       <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
+
+      <Dialog
+        open={state === "history" && historySearchOpen}
+        onOpenChange={(open) => {
+          setHistorySearchOpen(open);
+        }}
+      >
+        <DialogContent className="gap-4 sm:max-w-md" showCloseButton>
+          <DialogHeader>
+            <DialogTitle className="font-serif text-lg text-ink">
+              搜索档案
+            </DialogTitle>
+            <DialogDescription className="font-serif text-ink/50">
+              按问题或解读内容筛选本地记录
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            placeholder="搜索问题或关键词"
+            value={historySearchQuery}
+            onChange={(e) => setHistorySearchQuery(e.target.value)}
+            className="h-10 font-serif"
+            autoFocus
+          />
+          {historySearchQuery.trim() ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-xl font-serif"
+              onClick={() => setHistorySearchQuery("")}
+            >
+              清空搜索条件
+            </Button>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <footer className="px-8 py-12 border-t border-ink/5 bg-white/30 backdrop-blur-sm">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
