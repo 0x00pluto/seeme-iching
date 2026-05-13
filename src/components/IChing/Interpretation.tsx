@@ -236,8 +236,16 @@ export const Interpretation: React.FC<InterpretationProps> = ({
       }
     };
 
-    fetchInterpretation();
+    // 推迟到宏任务：避免 React StrictMode 开发环境下「effect → cleanup → effect」
+    // 同步发起两次 stream，导致服务端连续扣两次日额度。
+    let cancelled = false;
+    const scheduleId = window.setTimeout(() => {
+      if (!cancelled) void fetchInterpretation();
+    }, 0);
+
     return () => {
+      cancelled = true;
+      window.clearTimeout(scheduleId);
       abortRef.current?.abort();
     };
   }, [lines, question, benGua, huGua, cuoGua, zongGua, cachedMarkdown, cachedDeepInquiryQuestions]);

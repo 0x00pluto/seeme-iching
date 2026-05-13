@@ -293,7 +293,10 @@ export const Home: React.FC = () => {
                 </span>
                 <button
                   type="button"
-                  onClick={() => setAccountMenuOpen(true)}
+                  onClick={() => {
+                    void refreshAuth();
+                    setAccountMenuOpen(true);
+                  }}
                   aria-label="打开账户菜单"
                   aria-haspopup="dialog"
                   className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-ink font-serif text-sm font-bold text-bg transition-opacity hover:opacity-90"
