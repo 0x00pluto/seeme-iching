@@ -11,6 +11,7 @@ import {
 } from "./server/ark-api.js";
 import { pipeArkStreamToSse } from "./server/pipe-ark-sse.js";
 import { flushHeadersAndInitialSsePing } from "./server/sse-warmup.js";
+import { probeSupabaseConnectivity } from "./server/supabase-client.js";
 
 dotenv.config();
 
@@ -19,6 +20,20 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+
+  app.get("/api/health/supabase", async (_req, res) => {
+    try {
+      const result = await probeSupabaseConnectivity();
+      if (result.ok === false) {
+        res.status(503).json({ ok: false, error: result.error });
+        return;
+      }
+      res.status(200).json({ ok: true, via: "supabase-js" });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      res.status(503).json({ ok: false, error: message });
+    }
+  });
 
   app.post("/api/interpret", async (req, res) => {
     const { status, json } = await runInterpretApi(req.body);

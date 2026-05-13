@@ -26,6 +26,7 @@
 | 方向 | 入口 |
 |------|------|
 | AI 行为、interpret/chat、密钥侧逻辑 | [`server/ark-api.ts`](server/ark-api.ts) |
+| Supabase（服务端客户端、迁移、健康检查） | [`server/supabase-client.ts`](server/supabase-client.ts)、[`supabase/migrations/`](supabase/migrations/)、[`api/health/supabase.ts`](api/health/supabase.ts) |
 | 本地 HTTP 与静态资源 | [`server.ts`](server.ts) |
 | 托管平台无服务器路由 | [`api/`](api/) |
 | 前端主流程与本地档案 | [`src/pages/Home.tsx`](src/pages/Home.tsx) |

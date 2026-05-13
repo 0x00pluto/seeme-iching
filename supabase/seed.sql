@@ -1,0 +1,2 @@
+-- Optional seed data for `supabase db reset` (see supabase/config.toml [db.seed]).
+-- Add INSERT statements here when the project needs deterministic local data.

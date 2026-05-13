@@ -83,6 +83,7 @@ Vercel 把 `api/*` 下的 ts 文件按**路径**映射成 HTTP 端点：
 - [`api/interpret/stream.ts`](../api/interpret/stream.ts) → `POST /api/interpret/stream`
 - [`api/interpret/deep-inquiry.ts`](../api/interpret/deep-inquiry.ts) → `POST /api/interpret/deep-inquiry`
 - [`api/chat/stream.ts`](../api/chat/stream.ts) → `POST /api/chat/stream`
+- [`api/health/supabase.ts`](../api/health/supabase.ts) → `GET /api/health/supabase`（Supabase 连通性；需 `SUPABASE_*` 环境变量）
 
 **Do**: 需要加 `/api/foo/bar` 时，**一定**新建 `api/foo/bar.ts`。
 
@@ -324,7 +325,9 @@ export const config = {
 | `ARK_API_KEY` | 火山方舟 API Key（**必填**） | 本地 `.env`、Vercel Project Settings |
 | `ARK_BASE_URL` | 默认 Coding Plan，常规推理改 `.../api/v3` | 同上 |
 | `ARK_MODEL` | 默认 `ark-code-latest`，常规推理填 `ep-` 接入点 ID | 同上 |
-| `NODE_ENV` | `production` 时 [`server.ts:75`](../server.ts) 走静态 `dist/` | 部署平台 |
+| `SUPABASE_URL` | Supabase 项目 URL（`createServerSupabase`） | 本地 `.env`、Vercel（**勿**加 `VITE_`） |
+| `SUPABASE_SERVICE_ROLE_KEY` | 服务端特权 key（**勿**进前端包） | 同上 |
+| `NODE_ENV` | `production` 时 [`server.ts`](../server.ts) 走静态 `dist/` | 部署平台 |
 | `DISABLE_HMR` | 关 Vite HMR（AI Studio 等场景） | 本地 |
 
 **Do**:
