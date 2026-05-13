@@ -18,6 +18,7 @@ import {
   handleLogout,
   handleMe,
 } from "./server/auth-handlers.js";
+import { requireAuth, UNAUTHORIZED_RESPONSE } from "./server/require-auth.js";
 import { appendSessionCookie, appendClearSessionCookie } from "./server/user-session-cookie.js";
 import { buildAuthCallbackUrl, resolvePublicOrigin } from "./server/public-origin.js";
 
@@ -69,21 +70,37 @@ async function startServer() {
   });
 
   app.post("/api/interpret", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
     const { status, json } = await runInterpretApi(req.body);
     res.status(status).json(json);
   });
 
   app.post("/api/interpret/deep-inquiry", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
     const { status, json } = await runDeepInquiryApi(req.body);
     res.status(status).json(json);
   });
 
   app.post("/api/chat", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
     const { status, json } = await runChatApi(req.body);
     res.status(status).json(json);
   });
 
   app.post("/api/interpret/stream", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
     try {
       res.status(200);
       res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -109,6 +126,10 @@ async function startServer() {
   });
 
   app.post("/api/chat/stream", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
     try {
       res.status(200);
       res.setHeader("Content-Type", "text/event-stream; charset=utf-8");

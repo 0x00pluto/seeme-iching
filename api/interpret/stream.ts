@@ -6,6 +6,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { runInterpretStream } from "../../server/ark-api.js";
 import { pipeArkStreamToSse } from "../../server/pipe-ark-sse.js";
 import { flushHeadersAndInitialSsePing } from "../../server/sse-warmup.js";
+import { requireAuth, UNAUTHORIZED_RESPONSE } from "../../server/require-auth.js";
 
 export const config = {
   runtime: "nodejs",
@@ -15,6 +16,13 @@ export const config = {
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method Not Allowed" });
+    return;
+  }
+
+  const cookieHeader =
+    typeof req.headers.cookie === "string" ? req.headers.cookie : undefined;
+  if (!requireAuth(cookieHeader)) {
+    res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
     return;
   }
 

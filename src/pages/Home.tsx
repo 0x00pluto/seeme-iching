@@ -105,6 +105,11 @@ export const Home: React.FC = () => {
 
   const startDivination = () => {
     if (!canStartDivination) return;
+    if (!authUser) {
+      toast.message("请先登录后再开始测算");
+      setLoginOpen(true);
+      return;
+    }
     setState("divination");
   };
 
@@ -144,16 +149,18 @@ export const Home: React.FC = () => {
         </div>
         
         <nav className="flex items-center gap-6 sm:gap-8">
-          <button 
-            onClick={() => setState("history")}
-            className={cn(
-              "text-xs font-serif tracking-widest uppercase flex items-center gap-2 transition-colors",
-              state === "history" ? "text-brand" : "text-ink/40 hover:text-ink/80"
-            )}
-          >
-            <HistoryIcon size={14} />
-            <span>档案</span>
-          </button>
+          {authUser && (
+            <button
+              onClick={() => setState("history")}
+              className={cn(
+                "text-xs font-serif tracking-widest uppercase flex items-center gap-2 transition-colors",
+                state === "history" ? "text-brand" : "text-ink/40 hover:text-ink/80"
+              )}
+            >
+              <HistoryIcon size={14} />
+              <span>档案</span>
+            </button>
+          )}
           {authUser ? (
             <>
               <div className="flex items-center gap-4">

@@ -4,6 +4,7 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { runInterpretApi } from "../server/ark-api.js";
+import { requireAuth, UNAUTHORIZED_RESPONSE } from "../server/require-auth.js";
 
 /** 显式 Node 运行时：OpenAI SDK 依赖 Node API，勿用 Edge。 */
 export const config = {
@@ -15,6 +16,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   try {
     if (req.method !== "POST") {
       res.status(405).json({ error: "Method Not Allowed" });
+      return;
+    }
+    const cookieHeader =
+      typeof req.headers.cookie === "string" ? req.headers.cookie : undefined;
+    if (!requireAuth(cookieHeader)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
       return;
     }
     const { status, json } = await runInterpretApi(req.body);
