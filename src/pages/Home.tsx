@@ -1,12 +1,45 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Divination } from "@/components/IChing/Divination";
 import { Interpretation } from "@/components/IChing/Interpretation";
 import { History, HistoryItem } from "@/components/IChing/History";
+import { LoginDialog } from "@/components/auth/LoginDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { LineType } from "@/lib/iching";
+import { fetchAuthMe, postLogout, type AuthUser } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
-import { Sparkles, ChevronRight, History as HistoryIcon, Trash2, ArrowLeft } from "lucide-react";
+import {
+  Sparkles,
+  ChevronRight,
+  History as HistoryIcon,
+  ArrowLeft,
+  LogIn,
+  MoreVertical,
+} from "lucide-react";
 import { toast } from "sonner";
+
+/** 邮箱 @ 前本地部分作为昵称展示（避免整段邮箱形态）；过长截断 */
+function displayNameFromEmail(email: string): string {
+  const local = email.split("@")[0]?.trim() ?? email;
+  return local.length > 12 ? `${local.slice(0, 12)}…` : local;
+}
+
+/** 头像圆内首字符（支持中文首字） */
+function initialFromEmail(email: string): string {
+  const local = email.split("@")[0]?.trim() ?? "";
+  const ch = [...local][0];
+  if (!ch) return "?";
+  return ch.toLocaleUpperCase("en-US");
+}
+
+/** 订阅档位占位，后续可接 /api/auth/me */
+const SUBSCRIPTION_TIER: "free" | "pro" = "free";
 
 const HISTORY_STORAGE_KEY = "iching_history";
 
@@ -17,7 +50,12 @@ export const Home: React.FC = () => {
   const [lines, setLines] = useState<LineType[]>([]);
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const canStartDivination = question.trim().length > 0;
+
+  const tierLabel = SUBSCRIPTION_TIER === "free" ? "免费" : "PRO";
 
   useEffect(() => {
     const savedHistory = localStorage.getItem(HISTORY_STORAGE_KEY);
@@ -28,6 +66,23 @@ export const Home: React.FC = () => {
       console.error("Failed to load local history", e);
     }
   }, []);
+
+  const refreshAuth = useCallback(async () => {
+    try {
+      const { user } = await fetchAuthMe();
+      setAuthUser(user);
+    } catch {
+      setAuthUser(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshAuth();
+  }, [refreshAuth]);
+
+  useEffect(() => {
+    if (!authUser) setAccountMenuOpen(false);
+  }, [authUser]);
 
   const saveToHistory = async (item: HistoryItem) => {
     const newHistory = [item, ...history];
@@ -65,6 +120,12 @@ export const Home: React.FC = () => {
     if (state === "history") setState("landing");
   };
 
+  const handleLogout = async () => {
+    await postLogout();
+    setAuthUser(null);
+    toast.success("已退出登录");
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-bg text-ink selection:bg-brand/10 selection:text-brand">
       {/* Toaster is in App.tsx */}
@@ -82,7 +143,7 @@ export const Home: React.FC = () => {
           <h1 className="text-xl font-serif font-bold tracking-widest text-ink/80">镜微 · I-CHING</h1>
         </div>
         
-        <nav className="flex items-center gap-8">
+        <nav className="flex items-center gap-6 sm:gap-8">
           <button 
             onClick={() => setState("history")}
             className={cn(
@@ -93,6 +154,109 @@ export const Home: React.FC = () => {
             <HistoryIcon size={14} />
             <span>档案</span>
           </button>
+          {authUser ? (
+            <>
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  aria-label="更多选项"
+                  className="rounded-md p-1 text-ink/40 transition-colors hover:bg-ink/5 hover:text-ink/80"
+                >
+                  <MoreVertical size={18} strokeWidth={2} aria-hidden />
+                </button>
+                <span
+                  className="rounded-full bg-ink/10 px-2 py-0.5 text-[10px] font-bold tracking-widest text-ink/70 uppercase"
+                  aria-label={tierLabel === "免费" ? "免费版" : "专业版"}
+                >
+                  {tierLabel}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAccountMenuOpen(true)}
+                  aria-label="打开账户菜单"
+                  aria-haspopup="dialog"
+                  className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-ink font-serif text-sm font-bold text-bg transition-opacity hover:opacity-90"
+                >
+                  {authUser.email
+                    ? initialFromEmail(authUser.email)
+                    : "?"}
+                </button>
+              </div>
+
+              <Dialog
+                open={accountMenuOpen && !!authUser}
+                onOpenChange={setAccountMenuOpen}
+              >
+                <DialogContent
+                  className="top-24 right-4 left-auto z-[100] max-h-[min(90vh,520px)] w-[min(calc(100vw-2rem),22rem)] max-w-none translate-x-0 translate-y-0 origin-top-right gap-0 overflow-y-auto p-0 sm:right-8 sm:w-[min(calc(100vw-4rem),28rem)] data-open:zoom-in-95"
+                  showCloseButton
+                >
+                  <div className="relative border-b border-ink/10 px-4 pt-8 pb-4">
+                    <DialogTitle className="text-center font-serif text-lg font-bold tracking-widest text-ink">
+                      镜微
+                    </DialogTitle>
+                  </div>
+
+                  <div className="flex gap-3 border-b border-ink/10 px-4 py-4">
+                    <div
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-ink font-serif text-lg font-bold text-bg"
+                      aria-hidden
+                    >
+                      {authUser.email
+                        ? initialFromEmail(authUser.email)
+                        : "?"}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-serif text-base font-bold text-ink">
+                        {authUser.email
+                          ? displayNameFromEmail(authUser.email)
+                          : "已登录"}
+                      </p>
+                      <DialogDescription className="mt-0.5 break-all text-xs text-ink/50">
+                        {authUser.email ?? "—"}
+                      </DialogDescription>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2 px-4 py-4">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-11 w-full justify-center gap-2 rounded-xl font-serif"
+                      onClick={() => {
+                        setState("history");
+                        setAccountMenuOpen(false);
+                      }}
+                    >
+                      <HistoryIcon size={16} aria-hidden />
+                      档案
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 w-full justify-center rounded-xl font-serif"
+                      onClick={() => void handleLogout()}
+                    >
+                      退出账号
+                    </Button>
+                  </div>
+
+                  <p className="px-4 pb-4 text-center text-[10px] leading-relaxed text-ink/40">
+                    隐私权 · 服务条款 · 许可
+                  </p>
+                </DialogContent>
+              </Dialog>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setLoginOpen(true)}
+              className="text-xs font-serif tracking-widest uppercase flex items-center gap-2 rounded-full border border-ink/15 px-3 py-1.5 text-ink/70 transition-colors hover:border-ink/25 hover:text-ink"
+            >
+              <LogIn size={14} aria-hidden />
+              <span>登录</span>
+            </button>
+          )}
         </nav>
       </header>
 
@@ -282,6 +446,8 @@ export const Home: React.FC = () => {
           )}
         </AnimatePresence>
       </main>
+
+      <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
 
       <footer className="px-8 py-12 border-t border-ink/5 bg-white/30 backdrop-blur-sm">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">

@@ -12,6 +12,14 @@ import {
 import { pipeArkStreamToSse } from "./server/pipe-ark-sse.js";
 import { flushHeadersAndInitialSsePing } from "./server/sse-warmup.js";
 import { probeSupabaseConnectivity } from "./server/supabase-client.js";
+import {
+  handleSendMagicLink,
+  handleExchangeSession,
+  handleLogout,
+  handleMe,
+} from "./server/auth-handlers.js";
+import { appendSessionCookie, appendClearSessionCookie } from "./server/user-session-cookie.js";
+import { buildAuthCallbackUrl, resolvePublicOrigin } from "./server/public-origin.js";
 
 dotenv.config();
 
@@ -20,6 +28,31 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+
+  app.post("/api/auth/send-otp", async (req, res) => {
+    const origin = resolvePublicOrigin(req);
+    const redirectTo = buildAuthCallbackUrl(origin);
+    const result = await handleSendMagicLink(req.body, redirectTo);
+    res.status(result.status).json(result.json);
+  });
+
+  app.post("/api/auth/session", async (req, res) => {
+    const result = await handleExchangeSession(req.body, (token, maxAge) => {
+      appendSessionCookie(res, token, maxAge);
+    });
+    res.status(result.status).json(result.json);
+  });
+
+  app.post("/api/auth/logout", (_req, res) => {
+    appendClearSessionCookie(res);
+    const result = handleLogout();
+    res.status(result.status).json(result.json);
+  });
+
+  app.get("/api/auth/me", (req, res) => {
+    const result = handleMe(req.headers.cookie);
+    res.status(result.status).json(result.json);
+  });
 
   app.get("/api/health/supabase", async (_req, res) => {
     try {
