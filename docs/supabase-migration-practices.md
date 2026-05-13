@@ -20,7 +20,7 @@
 
 ---
 
-## 2. 本仓库 CLI 与脚本
+## 2. 本仓库 CLI
 
 开发机需安装依赖（含 dev 依赖 `supabase`），并已执行：
 
@@ -31,11 +31,11 @@
 
 | 命令 | 作用 |
 |------|------|
-| `pnpm run db:migration:new -- <snake_name>` | 由 [`scripts/db-migration-new.mjs`](../scripts/db-migration-new.mjs) 在 `supabase/migrations/` 生成空 SQL；**文件名时间戳为 Asia/Shanghai 墙钟** `YYYYMMDDHHMMSS`（若与目录内最大前缀冲突会自动顺延秒数）。 |
+| `pnpm run db:migration:new -- <snake_name>` | 封装 **`supabase migration new`**，在 `supabase/migrations/` 生成空 SQL；文件名前缀 **`YYYYMMDDHHMMSS`** 由 CLI 生成（随本机时区/环境；官方 CLI **无** `--timezone` 类参数）。若需 UTC 墙钟命名，可在单次命令前使用 `TZ=UTC`（macOS/Linux 常见写法）。 |
 | `pnpm run db:migration:list` | 查看远端/本地迁移应用情况（等价 `supabase migration list`）。 |
 | `pnpm run db:migrate` | 将未应用的 migration 推送到 **当前 link 指向的库**（`supabase db push`）。 |
 
-**说明**：勿依赖裸跑 `supabase migration new` 作为本仓库标准流程——其时间戳随**本机系统时区**变化；团队以脚本生成的东八区前缀为准。
+**说明**：团队统一用 `pnpm run db:migration:new`，与仓库内 **同一 `supabase` devDependency 版本**对齐；底层即官方 `supabase migration new`。生成的时间戳若**排序上早于**目录里已有 migration，需 **rename** 文件前缀或见 **§2.1** `migration repair`，勿手抄乱造前缀。
 
 **远端与本地顺序冲突**：若远端已应用较新版本，而仓库里又加入**更早时间戳**的文件，`db push` 会拒绝并提示 `--include-all`。更干净的做法见 **§2.1**（`migration repair`）。在未确认 `supabase link` 目标前勿执行 `db:migrate`。
 
@@ -76,7 +76,7 @@
 
 ### 4.2 命名与顺序
 
-- 文件名前缀由 [`scripts/db-migration-new.mjs`](../scripts/db-migration-new.mjs) 生成：`YYYYMMDDHHMMSS_description.sql`（**东八区墙钟**）。**禁止手抄**时间戳与他人冲突。
+- 文件名前缀为 **`YYYYMMDDHHMMSS_description.sql`**，由 **`supabase migration new`**（经 `pnpm run db:migration:new`）生成。**禁止手抄**时间戳；若 CLI 生成的前缀在排序上早于仓库/远端已有 migration，应 **rename** 或按 **§2.1** 纠偏历史后再推。
 - **`public` 内表 / 视图对象名**（`create table` 等）：见 [`docs/supabase-tables.md`](./supabase-tables.md) 开篇「表命名约定」，与既有 `interpret_*`、`user_*` 等域前缀保持一致。
 - 合并前拉取最新 `main`；若仍出现「本地新文件时间戳早于远端已应用版本」，见 [**§2.1**](#21-迁移历史纠偏migration-repair空库--可接受重放-ddl-时) `migration repair`，或官方 `db push --include-all`（需自行评估）。
 - **依赖顺序**：被引用表先于外键表；枚举/函数先于依赖它们的 policy。

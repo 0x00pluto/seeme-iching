@@ -20,7 +20,7 @@
 - `pnpm run dev` — 开发（Express + Vite HMR），默认 `http://localhost:3000`
 - `pnpm run build` — 前端构建产出 `dist/`
 - `pnpm run lint` — `tsc --noEmit`
-- `pnpm run db:migration:new -- <name>` — 新建迁移（[`scripts/db-migration-new.mjs`](scripts/db-migration-new.mjs)，文件名时间戳为东八区墙钟；需先 `supabase link`）
+- `pnpm run db:migration:new -- <name>` — 等价 **`supabase migration new`**，在 `supabase/migrations/` 生成空 SQL；文件名前缀 `YYYYMMDDHHMMSS` 由 **Supabase CLI** 按本机环境生成。若希望时间戳按 UTC 墙钟，可在命令前加 `TZ=UTC`（可选）。`db:migrate` / `list` 前需已 `supabase link`。
 - `pnpm run db:migration:list` — 查看迁移状态
 - `pnpm run db:migrate` — `supabase db push` 推送到已 link 的远端库
 
