@@ -130,16 +130,31 @@ export async function handleMe(cookieHeader: string | undefined): Promise<{
   }
   const base = { user: { id: session.sub, email: session.email } };
   if (!isQuotaBackendConfigured()) {
-    return { status: 200, json: { ...base, entitlements: null } };
+    return {
+      status: 200,
+      json: {
+        ...base,
+        entitlements: null,
+        quotaBackendConfigured: false,
+      },
+    };
   }
   try {
     const entitlements = await fetchEntitlementsPayload(session.sub);
-    return { status: 200, json: { ...base, entitlements } };
+    return {
+      status: 200,
+      json: { ...base, entitlements, quotaBackendConfigured: true },
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return {
       status: 503,
-      json: { error: "权益信息暂不可用", detail: msg, user: base.user },
+      json: {
+        error: "权益信息暂不可用",
+        detail: msg,
+        user: base.user,
+        quotaBackendConfigured: true,
+      },
     };
   }
 }

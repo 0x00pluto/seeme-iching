@@ -27,20 +27,29 @@ export type Entitlements = {
 export type AuthMeResponse = {
   user: AuthUser | null;
   entitlements?: Entitlements | null;
+  /** false：服务端未配置 SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY，不做额度 RPC */
+  quotaBackendConfigured?: boolean;
   error?: string;
   detail?: string;
 };
 
+export type AuthMeResult = AuthMeResponse & { ok: boolean };
+
 const jsonHeaders = { "Content-Type": "application/json" };
 
-export async function fetchAuthMe(): Promise<AuthMeResponse> {
+export async function fetchAuthMe(): Promise<AuthMeResult> {
   const res = await fetch("/api/auth/me", { credentials: "include" });
   const data = (await res.json()) as AuthMeResponse;
   if (res.ok) {
-    return data;
+    return { ...data, ok: true };
   }
   if (data.user) {
-    return { user: data.user, entitlements: null };
+    return {
+      ...data,
+      user: data.user,
+      entitlements: null,
+      ok: false,
+    };
   }
   throw new Error(data.error ?? "无法获取登录状态");
 }

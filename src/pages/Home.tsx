@@ -52,6 +52,9 @@ export const Home: React.FC = () => {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
+  /** 与 /api/auth/me 的 quotaBackendConfigured 对齐；undefined 表示未登录或未拉取 */
+  const [quotaBackendConfigured, setQuotaBackendConfigured] = useState<boolean | undefined>(undefined);
+  const [quotaEntitlementsError, setQuotaEntitlementsError] = useState<string | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [historySearchOpen, setHistorySearchOpen] = useState(false);
@@ -84,6 +87,16 @@ export const Home: React.FC = () => {
     entitlements &&
     `今日解读 ${entitlements.interpret.used}/${entitlements.interpret.limit}（东八区自然日）`;
 
+  const interpretQuota = useMemo(() => {
+    if (!entitlements) return null;
+    const { used, limit } = entitlements.interpret;
+    return {
+      remaining: Math.max(0, limit - used),
+      used,
+      limit,
+    };
+  }, [entitlements]);
+
   useEffect(() => {
     const savedHistory = localStorage.getItem(HISTORY_STORAGE_KEY);
     if (!savedHistory) return;
@@ -99,9 +112,24 @@ export const Home: React.FC = () => {
       const data = await fetchAuthMe();
       setAuthUser(data.user);
       setEntitlements(data.entitlements ?? null);
+      if (data.user) {
+        if (data.ok) {
+          setQuotaBackendConfigured(data.quotaBackendConfigured);
+          setQuotaEntitlementsError(null);
+        } else {
+          setQuotaBackendConfigured(data.quotaBackendConfigured ?? true);
+          const msg = [data.error, data.detail].filter(Boolean).join("：") || "权益接口异常";
+          setQuotaEntitlementsError(msg);
+        }
+      } else {
+        setQuotaBackendConfigured(undefined);
+        setQuotaEntitlementsError(null);
+      }
     } catch {
       setAuthUser(null);
       setEntitlements(null);
+      setQuotaBackendConfigured(undefined);
+      setQuotaEntitlementsError(null);
     }
   }, []);
 
@@ -172,6 +200,9 @@ export const Home: React.FC = () => {
   const handleLogout = async () => {
     await postLogout();
     setAuthUser(null);
+    setEntitlements(null);
+    setQuotaBackendConfigured(undefined);
+    setQuotaEntitlementsError(null);
     toast.success("已退出登录");
   };
 
@@ -275,7 +306,10 @@ export const Home: React.FC = () => {
 
               <Dialog
                 open={accountMenuOpen && !!authUser}
-                onOpenChange={setAccountMenuOpen}
+                onOpenChange={(open) => {
+                  setAccountMenuOpen(open);
+                  if (open && authUser) void refreshAuth();
+                }}
               >
                 <DialogContent
                   className="top-24 right-4 left-auto z-[100] max-h-[min(90vh,520px)] w-[min(calc(100vw-2rem),22rem)] max-w-none translate-x-0 translate-y-0 origin-top-right gap-0 overflow-y-auto p-0 sm:right-8 sm:w-[min(calc(100vw-4rem),28rem)] data-open:zoom-in-95"
@@ -305,11 +339,61 @@ export const Home: React.FC = () => {
                       <DialogDescription className="mt-0.5 break-all text-xs text-ink/50">
                         {authUser.email ?? "—"}
                       </DialogDescription>
-                      {interpretHint ? (
-                        <p className="mt-2 text-xs text-ink/45">{interpretHint}</p>
-                      ) : null}
                     </div>
                   </div>
+
+                  {interpretQuota ? (
+                    <div className="px-4 py-3">
+                      <div className="rounded-xl bg-ink/[0.02] px-3 py-3">
+                        <p className="font-serif text-[10px] font-medium leading-snug tracking-wide text-ink/50">
+                          每日解读余量（0点恢复：
+                          <span className="font-bold tabular-nums text-ink">
+                            {interpretQuota.limit}
+                            次
+                          </span>
+                          ）
+                        </p>
+                        <div className="mt-1.5 flex items-center justify-between gap-2">
+                          <p className="min-w-0 font-serif text-lg font-bold text-ink">
+                            还可解读{" "}
+                            <span className="tabular-nums">{interpretQuota.remaining}</span> 次
+                          </p>
+                          <Button
+                            variant="secondary"
+                            className="h-11 shrink-0 justify-center rounded-xl px-3 font-serif text-sm"
+                            asChild
+                          >
+                            <a href="#">获取更多解读次数</a>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : quotaBackendConfigured === false ? (
+                    <div className="border-b border-ink/10 px-4 py-3">
+                      <p className="text-xs leading-relaxed text-ink/45">
+                        额度统计需在服务端配置{" "}
+                        <span className="rounded bg-ink/5 px-1 font-mono text-[10px] text-ink/55">
+                          SUPABASE_URL
+                        </span>{" "}
+                        与{" "}
+                        <span className="rounded bg-ink/5 px-1 font-mono text-[10px] text-ink/55">
+                          SUPABASE_SERVICE_ROLE_KEY
+                        </span>
+                        。仅配置邮箱登录（Anon）时不会拉取权益快照，与「尚未解读」无关。
+                      </p>
+                    </div>
+                  ) : quotaEntitlementsError ? (
+                    <div className="border-b border-ink/10 px-4 py-3">
+                      <p className="text-xs text-ink/45">权益数据加载失败（请确认已执行 migration 且库可访问）</p>
+                      <p className="mt-1.5 break-all font-mono text-[10px] leading-relaxed text-ink/40">
+                        {quotaEntitlementsError}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="border-b border-ink/10 px-4 py-3">
+                      <p className="text-xs text-ink/40">额度信息暂不可用</p>
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-2 px-4 py-4">
                     <Button
