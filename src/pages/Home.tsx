@@ -75,6 +75,12 @@ export const Home: React.FC = () => {
     );
   }, [history, historySearchQuery]);
 
+  const deepInquirySavedCount = useMemo(
+    () =>
+      history.filter((h) => (h.deepInquiryQuestions?.length ?? 0) > 0).length,
+    [history]
+  );
+
   const tierLabel = SUBSCRIPTION_TIER === "free" ? "免费" : "PRO";
 
   useEffect(() => {
@@ -516,6 +522,7 @@ export const Home: React.FC = () => {
               <History
                 items={filteredHistory}
                 allItemsCount={history.length}
+                deepInquirySavedCount={deepInquirySavedCount}
                 onSelectItem={handleSelectItem}
                 onClear={clearHistory}
                 onStartCasting={() => setState("landing")}
