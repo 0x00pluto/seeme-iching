@@ -19,6 +19,22 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+/**
+ * Vercel 对 serverless 单独跑 tsc 时，`createClient(..., { persistSession: false }).auth`
+ * 可能被收窄为不含 `signInWithOtp` / `getUser` 的变体；运行时 API 仍存在。
+ * 这里只声明本文件实际调用的子集，避免 TS2339 导致线上函数编译失败。
+ */
+type AuthForMagicLinkHandlers = {
+  signInWithOtp(credentials: {
+    email: string;
+    options?: { shouldCreateUser?: boolean; emailRedirectTo?: string };
+  }): Promise<{ error: { message: string } | null }>;
+  getUser(jwt: string): Promise<{
+    data: { user: { id: string; email?: string | null } | null };
+    error: { message?: string } | null;
+  }>;
+};
+
 function authDepsReady(): boolean {
   return Boolean(
     process.env.USER_SESSION_SECRET?.trim() &&
@@ -50,8 +66,8 @@ export async function handleSendMagicLink(
   }
 
   try {
-    const sb = getSupabaseAuthClient();
-    const { error } = await sb.auth.signInWithOtp({
+    const auth = getSupabaseAuthClient().auth as AuthForMagicLinkHandlers;
+    const { error } = await auth.signInWithOtp({
       email,
       options: {
         shouldCreateUser: true,
@@ -86,8 +102,8 @@ export async function handleExchangeSession(
   }
 
   try {
-    const sb = getSupabaseAuthClient();
-    const { data, error } = await sb.auth.getUser(accessToken);
+    const auth = getSupabaseAuthClient().auth as AuthForMagicLinkHandlers;
+    const { data, error } = await auth.getUser(accessToken);
     if (error || !data.user?.id || !data.user.email) {
       return {
         status: 401,
