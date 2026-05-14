@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "db:migration:new": "supabase migration new",
+    "db:migration:new": "node scripts/db-migration-new.mjs",
     "db:migration:list": "supabase migration list",
     "db:migrate": "supabase db push"
   },
