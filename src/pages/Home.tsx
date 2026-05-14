@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { Divination } from "@/components/IChing/Divination";
-import { Interpretation } from "@/components/IChing/Interpretation";
 import { History, HistoryItem } from "@/components/IChing/History";
+import { Interpretation } from "@/components/IChing/Interpretation";
 import { LoginDialog } from "@/components/auth/LoginDialog";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,21 +10,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { LineType } from "@/lib/iching";
 import { clearArchives, fetchArchives, postArchive } from "@/lib/archives-api";
 import { fetchAuthMe, postLogout, type AuthUser, type Entitlements } from "@/lib/auth-api";
+import { LineType } from "@/lib/iching";
 import { cn } from "@/lib/utils";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  Sparkles,
+  ArrowLeft,
   ChevronRight,
   History as HistoryIcon,
-  ArrowLeft,
   LogIn,
   MoreVertical,
   Search,
+  Sparkles,
 } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 /** 邮箱 @ 前本地部分作为昵称展示（避免整段邮箱形态）；过长截断 */
@@ -547,13 +547,13 @@ export const Home: React.FC = () => {
                 </motion.div>
                 
                 <h2 className="text-5xl md:text-7xl font-serif font-bold tracking-tight leading-[1.1] text-ink max-w-4xl">
-                  易经非预言之术，<br />
-                  而是照见内心模式的明镜。
+                  易经非预言之术<br />
+                  而是照见内心模式的明镜
                 </h2>
                 
                 <p className="text-lg md:text-xl text-ink/40 font-serif max-w-2xl mx-auto leading-relaxed italic">
-                  “观乎天文，以察时变；观乎人文，以化成天下。”<br />
-                  在这里，卦象是你的投影，AI 是你的回响。
+                  “观乎天文，以察时变；观乎人文，以化成天下”<br />
+                  在这里，卦象是你的投影，AI 是你的回响
                 </p>
               </div>
 
