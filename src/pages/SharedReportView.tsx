@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { markdownReportRehypePlugins } from "@/lib/markdown-report-rehype";
+import { markdownReportMarkdownComponents } from "@/lib/markdown-report-table-tr";
 import { BookOpen, Compass, Eye, Ghost, Heart, Loader2 } from "lucide-react";
 import { Hexagram } from "@/components/IChing/Hexagram";
 import { Button } from "@/components/ui/button";
@@ -162,7 +164,13 @@ export const SharedReportView: React.FC<SharedReportViewProps> = ({ token }) => 
                 <div className="h-px w-32 bg-ink/10" />
               </div>
               <div className="markdown-report text-[1.05rem] leading-relaxed text-ink/75 sm:text-xl">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{normalizedInterpretation}</ReactMarkdown>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={markdownReportRehypePlugins}
+                  components={markdownReportMarkdownComponents}
+                >
+                  {normalizedInterpretation}
+                </ReactMarkdown>
               </div>
             </div>
           </div>

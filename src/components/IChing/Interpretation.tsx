@@ -17,6 +17,8 @@ import { Ban, BookOpen, ClipboardCopy, Compass, Eye, Ghost, Heart, Loader2, Shar
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { markdownReportRehypePlugins } from "@/lib/markdown-report-rehype";
+import { markdownReportMarkdownComponents } from "@/lib/markdown-report-table-tr";
 import { toast } from "sonner";
 import { DeepDialogue } from "./DeepDialogue";
 import { Hexagram } from "./Hexagram";
@@ -538,7 +540,13 @@ export const Interpretation: React.FC<InterpretationProps> = ({
               <div className="flex flex-1 flex-col gap-6">
                 <div className="relative min-h-0">
                   <div className="markdown-report text-[1.05rem] leading-relaxed text-ink/75 sm:text-xl">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{normalizedInterpretation}</ReactMarkdown>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={markdownReportRehypePlugins}
+                      components={markdownReportMarkdownComponents}
+                    >
+                      {normalizedInterpretation}
+                    </ReactMarkdown>
                   </div>
                 </div>
                 {isLoading && (

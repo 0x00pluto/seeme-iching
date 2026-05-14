@@ -306,7 +306,7 @@ v4 仍支持 `@apply`，但不是好实践。组件复用应当抽 React 组件�
 
 ### 7.3 流式渲染的边界处理
 
-流式输出的 Markdown 表格在 token 边界会断行，参考 [`src/components/IChing/Interpretation.tsx:17-65`](../src/components/IChing/Interpretation.tsx) 的 `normalizeMarkdownTables` 工具：将多行合并、补全分隔行、清理空行。
+流式输出的 Markdown 表格在 token 边界会断行，参考 [`src/lib/normalize-markdown-report.ts`](../src/lib/normalize-markdown-report.ts) 的 `normalizeMarkdownTables`（解读页与分享页经 `useMemo` 调用）：将多行合并、补全分隔行、清理空行。
 
 **Do**: 用 `useMemo` 把昂贵的 normalize / 解析包起来（[L156](../src/components/IChing/Interpretation.tsx)）：
 
