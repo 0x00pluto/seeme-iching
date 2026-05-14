@@ -2,6 +2,14 @@ import { fetchDeepInquiry, InterpretDailyQuotaError, streamInterpret } from "@/l
 import { HEXAGRAMS, LineType, getBinary, getCuoGuaLines, getHuGuaLines, getZongGuaLines } from "@/lib/iching";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { AnimatePresence, motion } from "framer-motion";
 import { BookOpen, Compass, Eye, Ghost, Heart, Loader2, Share2 } from "lucide-react";
@@ -23,6 +31,8 @@ interface InterpretationProps {
   cachedMarkdown?: string;
   /** 与档案一并保存的三条深入追问；缺失时用本地兜底 */
   cachedDeepInquiryQuestions?: string[];
+  /** 会员专享：镜下深入对话；免费档为 false */
+  canUseDeepFollowUp?: boolean;
   onSave?: (payload: {
     interpretation: string;
     deepInquiryQuestions?: string[];
@@ -142,6 +152,7 @@ export const Interpretation: React.FC<InterpretationProps> = ({
   fromArchive = false,
   cachedMarkdown,
   cachedDeepInquiryQuestions,
+  canUseDeepFollowUp = false,
   onSave,
 }) => {
   const [interpretation, setInterpretation] = useState<string>("");
@@ -154,6 +165,7 @@ export const Interpretation: React.FC<InterpretationProps> = ({
   const [deepInquiryLoading, setDeepInquiryLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveDone, setSaveDone] = useState(false);
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const deepInquiryAbortRef = useRef<AbortController | null>(null);
   const [hintOffset, setHintOffset] = useState(0);
@@ -360,6 +372,27 @@ export const Interpretation: React.FC<InterpretationProps> = ({
 
   return (
     <div className="max-w-6xl mx-auto py-10 px-6 sm:px-8 flex flex-col gap-10">
+      <Dialog open={upgradeDialogOpen} onOpenChange={setUpgradeDialogOpen}>
+        <DialogContent className="gap-4 sm:max-w-md" showCloseButton>
+          <DialogHeader>
+            <DialogTitle className="font-serif text-lg text-ink">深入追问为会员功能</DialogTitle>
+            <DialogDescription className="font-serif text-ink/60 leading-relaxed">
+              三条追问是陪你从叙事里多看一角的入口；镜下对话需要会员身份。你仍可完整阅读观心报告与书写自我觉察——照见不是为了断言命运，而是多一个温柔的停顿。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <DialogClose asChild>
+              <Button
+                type="button"
+                className="rounded-full bg-ink px-8 font-serif tracking-widest text-bg hover:bg-ink/90"
+              >
+                我知道了
+              </Button>
+            </DialogClose>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <AnimatePresence>
         {showDialogue && (
           <DeepDialogue
@@ -497,6 +530,10 @@ export const Interpretation: React.FC<InterpretationProps> = ({
                       key={`deep-inquiry-${i}`}
                       type="button"
                       onClick={() => {
+                        if (!canUseDeepFollowUp) {
+                          setUpgradeDialogOpen(true);
+                          return;
+                        }
                         setSelectedDirection(label);
                         setShowDialogue(true);
                       }}

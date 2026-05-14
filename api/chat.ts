@@ -4,6 +4,7 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { runChatApi } from "../server/ark-api.js";
+import { ensureDeepChatMembershipAllowed } from "../server/membership-quota.js";
 import { requireAuth, UNAUTHORIZED_RESPONSE } from "../server/require-auth.js";
 
 export const config = {
@@ -19,8 +20,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     const cookieHeader =
       typeof req.headers.cookie === "string" ? req.headers.cookie : undefined;
-    if (!requireAuth(cookieHeader)) {
+    const session = requireAuth(cookieHeader);
+    if (!session) {
       res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const gate = await ensureDeepChatMembershipAllowed(session.sub);
+    if (!gate.allowed) {
+      res.status(gate.status).json(gate.body);
       return;
     }
     const { status, json } = await runChatApi(req.body);

@@ -21,7 +21,11 @@ import {
   handleLogout,
   handleMe,
 } from "./server/auth-handlers.js";
-import { consumeInterpretQuota, isQuotaBackendConfigured } from "./server/membership-quota.js";
+import {
+  consumeInterpretQuota,
+  ensureDeepChatMembershipAllowed,
+  isQuotaBackendConfigured,
+} from "./server/membership-quota.js";
 import {
   handleArchivesDeleteAll,
   handleArchivesDeleteOne,
@@ -134,8 +138,14 @@ async function startServer() {
   });
 
   app.post("/api/chat", async (req, res) => {
-    if (!requireAuth(req.headers.cookie)) {
+    const session = requireAuth(req.headers.cookie);
+    if (!session) {
       res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const gate = await ensureDeepChatMembershipAllowed(session.sub);
+    if (!gate.allowed) {
+      res.status(gate.status).json(gate.body);
       return;
     }
     const { status, json } = await runChatApi(req.body);
@@ -188,8 +198,14 @@ async function startServer() {
   });
 
   app.post("/api/chat/stream", async (req, res) => {
-    if (!requireAuth(req.headers.cookie)) {
+    const session = requireAuth(req.headers.cookie);
+    if (!session) {
       res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const gate = await ensureDeepChatMembershipAllowed(session.sub);
+    if (!gate.allowed) {
+      res.status(gate.status).json(gate.body);
       return;
     }
     try {

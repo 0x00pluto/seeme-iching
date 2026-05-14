@@ -104,6 +104,15 @@ export const Home: React.FC = () => {
     };
   }, [entitlements]);
 
+  /** 深入追问 / 镜下对话：仅非 free 档可用 */
+  const canUseDeepFollowUp = useMemo(
+    () =>
+      Boolean(
+        entitlements?.membership.tier.code && entitlements.membership.tier.code !== "free",
+      ),
+    [entitlements],
+  );
+
   const refreshAuth = useCallback(async () => {
     try {
       const data = await fetchAuthMe();
@@ -655,6 +664,7 @@ export const Home: React.FC = () => {
                 fromArchive={Boolean(selectedArchiveItemId)}
                 cachedMarkdown={archivePayload?.markdown}
                 cachedDeepInquiryQuestions={archivePayload?.deepInquiryQuestions}
+                canUseDeepFollowUp={canUseDeepFollowUp}
                 onSave={persistArchive}
               />
             </motion.section>

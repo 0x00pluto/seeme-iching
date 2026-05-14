@@ -116,3 +116,52 @@ export async function fetchEntitlementsPayload(userId: string): Promise<Record<s
     },
   };
 }
+
+/** 与 `/api/chat*` 403 响应体对齐，供客户端识别 */
+export type DeepChatMembershipDeniedBody = {
+  error: string;
+  code: "DEEP_CHAT_MEMBERSHIP_REQUIRED";
+};
+
+/**
+ * 镜下对话（/api/chat、/api/chat/stream）：需可读会员快照；`tier.code === "free"` 拒绝。
+ * 与前端 `canUseDeepFollowUp` 一致，防止绕过 UI 直接调接口。
+ */
+export async function ensureDeepChatMembershipAllowed(userId: string): Promise<
+  { allowed: true } | { allowed: false; status: 403 | 503; body: Record<string, unknown> }
+> {
+  if (!isQuotaBackendConfigured()) {
+    return {
+      allowed: false,
+      status: 503,
+      body: {
+        error: "权益服务未配置",
+        detail: "缺少 SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY",
+      },
+    };
+  }
+  try {
+    const payload = await fetchEntitlementsPayload(userId);
+    const membership = payload.membership as { tier?: { code?: string } } | undefined;
+    const tierCode =
+      typeof membership?.tier?.code === "string" ? membership.tier.code : "free";
+    if (tierCode === "free") {
+      return {
+        allowed: false,
+        status: 403,
+        body: {
+          error: "深入追问与镜下对话为会员功能，请升级后使用",
+          code: "DEEP_CHAT_MEMBERSHIP_REQUIRED",
+        },
+      };
+    }
+    return { allowed: true };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return {
+      allowed: false,
+      status: 503,
+      body: { error: "会员权益校验失败", detail: message },
+    };
+  }
+}
