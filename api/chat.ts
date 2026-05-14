@@ -1,9 +1,10 @@
 /**
  * Vercel Serverless：POST /api/chat
+ * 与本地 Express 共用 `server/ark-api.ts`；按 `SEEME_AI_PROVIDER` 经 `server/llm/registry` 选择 ARK_* 或 MOONSHOT_*。
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { runChatApi } from "../server/ark-api.js";
-import { requireAuth, UNAUTHORIZED_RESPONSE } from "../server/require-auth.js";
+import { runChatApi } from "../server/ark-api";
+import { requireAuth, UNAUTHORIZED_RESPONSE } from "../server/require-auth";
 
 export const config = {
   runtime: "nodejs",

@@ -17,8 +17,8 @@ export type DeepInquiryResponse = {
   deepInquiry: [string, string, string];
 };
 
-// 当前实现：前端只走同源流式代理，不在浏览器直连方舟（避免 CORS / key 暴露）。
-// 对应后端端点：/api/interpret/stream、/api/interpret/deep-inquiry 与 /api/chat/stream
+// 当前实现：前端只走同源流式代理，不在浏览器直连大模型供应商（避免 CORS / key 暴露）。
+// 后端由 SEEME_AI_PROVIDER 在火山方舟与 Kimi Moonshot 间切换；对应端点：/api/interpret/stream、/api/chat/stream 等
 
 export class InterpretDailyQuotaError extends Error {
   readonly code = "INTERPRET_DAILY_QUOTA" as const;

@@ -1,10 +1,10 @@
 /**
  * Vercel Serverless：POST /api/interpret/deep-inquiry
- * 基于已完成的观心报告生成三条深入问句（JSON）；与本地 Express 共用 `server/ark-api.ts`。
+ * 基于已完成的观心报告生成三条深入问句（JSON）；与本地 Express 共用 `server/ark-api.ts`；按 `SEEME_AI_PROVIDER` 经 `server/llm/registry` 选择 ARK_* 或 MOONSHOT_*。
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { runDeepInquiryApi } from "../../server/ark-api.js";
-import { requireAuth, UNAUTHORIZED_RESPONSE } from "../../server/require-auth.js";
+import { runDeepInquiryApi } from "../../server/ark-api";
+import { requireAuth, UNAUTHORIZED_RESPONSE } from "../../server/require-auth";
 
 export const config = {
   runtime: "nodejs",

@@ -2,8 +2,8 @@
  * Vercel Serverless：DELETE /api/archives/:id
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { handleArchivesDeleteOne } from "../../server/archives-handlers.js";
-import { requireAuth, UNAUTHORIZED_RESPONSE } from "../../server/require-auth.js";
+import { handleArchivesDeleteOne } from "../../server/archives-handlers";
+import { requireAuth, UNAUTHORIZED_RESPONSE } from "../../server/require-auth";
 
 export const config = {
   runtime: "nodejs",

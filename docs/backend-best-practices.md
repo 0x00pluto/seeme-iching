@@ -3,7 +3,7 @@
 面向 `seeme-iching` 仓库中协作的开发者与 AI 助手。协作入口见 [`docs/doc_index.md`](./doc_index.md)；本文档不重复其中的分流说明，只补落地细节、Do / Don't 与可观测性、限流等前瞻实践。每条都尽量给本仓库的真实代码引用与反例。
 
 > 本仓库后端的定位极简：**AI 转发 + SSE 流式**；占卦档案等在前端 **localStorage**，不经由本后端持久化。  
-> 双运行时：本地 / 自托管走 Express（[`server.ts`](../server.ts)），Vercel 部署走 Serverless Functions（[`api/`](../api/)），共享 [`server/ark-api.ts`](../server/ark-api.ts) 业务逻辑。
+> 双运行时：本地 / 自托管走 Express（[`server.ts`](../server.ts)），Vercel 部署走 Serverless Functions（[`api/`](../api/)），共享 [`server/ark-api.ts`](../server/ark-api.ts) 业务逻辑；具体 LLM 端点由 [`server/llm/resolve.ts`](../server/llm/resolve.ts) 的 `resolveAiProvider()` 与 [`server/llm/registry.ts`](../server/llm/registry.ts) 的 `getActiveLlmBackend()` 解析为 **火山方舟** 或 **Kimi Moonshot**。
 
 ---
 
@@ -20,13 +20,17 @@ src (浏览器)
        └─ Vercel -> api/interpret.ts | api/interpret/deep-inquiry.ts | api/chat.ts | api/{interpret,chat}/stream.ts
                        └─ 调同一组 server/ark-api.ts 函数
                                 │
-                                └─ 火山方舟（OpenAI 兼容） https://ark.cn-beijing.volces.com/api/coding/v3
+                                ├─ SEEME_AI_PROVIDER=ark（默认）
+                                │     └─ 火山方舟（OpenAI 兼容）https://ark.cn-beijing.volces.com/api/coding/v3
+                                │
+                                └─ SEEME_AI_PROVIDER=kimi
+                                      └─ Kimi Moonshot（OpenAI 兼容）https://api.moonshot.cn/v1（默认，可 MOONSHOT_BASE_URL 覆盖）
 ```
 
 **核心设计原则**：
 
 - **业务逻辑只能写在 [`server/ark-api.ts`](../server/ark-api.ts)**。Express 与 Vercel Functions 都是"传输层适配器"，不能在两边各写一遍 Prompt 或错误处理。
-- **服务端密钥不出服务端**：`ARK_API_KEY` 只在 Node 进程读，永远不能进 bundle、不能写日志、不能回前端。
+- **服务端密钥不出服务端**：`ARK_API_KEY` / `MOONSHOT_API_KEY` 只在 Node 进程读（由 `SEEME_AI_PROVIDER` 决定用哪套），永远不能进 bundle、不能写日志、不能回前端。
 - **流式优先**：AI 解读普遍 5–30s，必须走 SSE 让用户看到"逐字生成"，而不是同步等结果。
 
 ---
@@ -47,7 +51,7 @@ runChatStream(body)         // AsyncGenerator，逐 token yield
 
 Express 端的接入：[`server.ts`](../server.ts)（含 `/api/interpret/deep-inquiry`）；Vercel Functions 端的接入：[`api/interpret.ts`](../api/interpret.ts)、[`api/interpret/deep-inquiry.ts`](../api/interpret/deep-inquiry.ts)、[`api/chat.ts`](../api/chat.ts)。
 
-**Do**: 方舟调用编排、错误归类、流式解析与 JSON 校验改 [`server/ark-api.ts`](../server/ark-api.ts)；**可维护的长 Prompt 模板**改 [`server/prompts/`](../server/prompts/)，由 `ark-api` 引用。**两个运行时自动同步**。
+**Do**: LLM 调用编排、流式解析与 JSON 校验改 [`server/ark-api.ts`](../server/ark-api.ts)；**提供商解析**改 [`server/llm/resolve.ts`](../server/llm/resolve.ts)；**注册表与 `LlmBackend` 接口**改 [`server/llm/registry.ts`](../server/llm/registry.ts)、[`server/llm/types.ts`](../server/llm/types.ts)；**各供应商实现**改 [`server/llm/providers/`](../server/llm/providers/)（`ark.ts`、`kimi.ts`）；**可维护的长 Prompt 模板**改 [`server/prompts/`](../server/prompts/)，由 `ark-api` 引用。**两个运行时自动同步**。
 
 **Don't**: 在 [`api/chat.ts:18`](../api/chat.ts) 里加私货逻辑（"只在 Vercel 多做一步 X"）。两套代码很快会漂移，长期一定踩坑。
 
@@ -177,7 +181,9 @@ import { runChatApi } from "../server/ark-api.js";
 
 ### 5.1 客户端工厂集中
 
-[`server/ark-api.ts:61-72`](../server/ark-api.ts)：
+当前提供商由 [`server/llm/resolve.ts`](../server/llm/resolve.ts) 的 `resolveAiProvider()` 决定（默认 `ark`），活动后端由 [`server/llm/registry.ts`](../server/llm/registry.ts) 的 `getActiveLlmBackend()` 返回，实现位于 [`server/llm/providers/ark.ts`](../server/llm/providers/ark.ts) 与 [`server/llm/providers/kimi.ts`](../server/llm/providers/kimi.ts)。
+
+**方舟**侧常量与 `getArkClient()` 仍在 [`server/llm/providers/ark.ts`](../server/llm/providers/ark.ts)（并由 [`server/ark-api.ts`](../server/ark-api.ts) re-export 以保持历史 import 路径可用）：
 
 ```ts
 export function getArkClient() {
@@ -194,20 +200,22 @@ export function getArkModelId(): string {
 }
 ```
 
-**Do**: 任何业务函数都通过 `getArkClient()` / `getArkModelId()` 获取依赖，**不要**直接读 `process.env.ARK_API_KEY`。这样：
+**Kimi** 侧：`kimiBackend` 与 `formatKimiFailure()` 等在 [`server/llm/providers/kimi.ts`](../server/llm/providers/kimi.ts)。
 
-1. 未配置时统一返回 `null`，错误处理一致（[`server/ark-api.ts:139-141`](../server/ark-api.ts)）；
-2. 测试时可以 mock 这两个函数；
-3. 想加多账号 / 多模型路由时只改一处。
+**Do**: 业务与 handler 通过 `getActiveLlmBackend()` 获取 `LlmBackend`，**不要**在 `api/*.ts` 里直接读 `MOONSHOT_API_KEY` 或绕过 `server/llm/`。
+
+**Don't**: 在分散的 handler 或 util 里直接读 `ARK_API_KEY` / `MOONSHOT_API_KEY`，绕过 `getArkClient()` / `LlmBackend.getOpenAI()` 与统一缺 key 文案。
 
 ### 5.2 默认值与配置文档化
 
-[`server/ark-api.ts:6-7`](../server/ark-api.ts) 的两个常量：
+[`server/llm/providers/ark.ts`](../server/llm/providers/ark.ts) 方舟默认常量：
 
 ```ts
 export const ARK_BASE_URL_DEFAULT = "https://ark.cn-beijing.volces.com/api/coding/v3";
 export const ARK_MODEL_DEFAULT = "ark-code-latest";
 ```
+
+Kimi 默认见 [`server/llm/providers/kimi.ts`](../server/llm/providers/kimi.ts)（`MOONSHOT_BASE_URL_DEFAULT`、`KIMI_MODEL_DEFAULT`）。
 
 **Do**: 默认值跟本文 [§7](#7-环境变量与密钥) 及仓库 [`docs/doc_index.md`](./doc_index.md) 中的环境变量指针保持一致。改默认值时**必须**同步改文档。
 
@@ -324,9 +332,14 @@ export const config = {
 
 | 变量 | 用途 | 在哪配 |
 |------|------|--------|
-| `ARK_API_KEY` | 火山方舟 API Key（**必填**） | 本地 `.env`、Vercel Project Settings |
+| `SEEME_AI_PROVIDER` | `ark`（默认）或 `kimi`；也可用 `AI_PROVIDER` 作后备 | 本地 `.env`、Vercel |
+| `ARK_API_KEY` | 火山方舟 API Key（provider 为 **ark** 时必填） | 同上 |
 | `ARK_BASE_URL` | 默认 Coding Plan，常规推理改 `.../api/v3` | 同上 |
 | `ARK_MODEL` | 默认 `ark-code-latest`，常规推理填 `ep-` 接入点 ID | 同上 |
+| `MOONSHOT_API_KEY` | Kimi API Key（provider 为 **kimi** 时必填） | 同上 |
+| `MOONSHOT_BASE_URL` | 默认 `https://api.moonshot.cn/v1`，可按账号改为 `.ai` 域 | 同上 |
+| `KIMI_MODEL` | 默认 `kimi-k2.6` | 同上 |
+| `KIMI_THINKING_ENABLED` | 不设=关闭 Kimi K2 `thinking`；`1`/`true`/`yes`/`on`=开启（仅服务端自测；响应仍只暴露正文 `content`） | 同上 |
 | `SUPABASE_URL` | Supabase 项目 URL（`createServerSupabase`） | 本地 `.env`、Vercel（**勿**加 `VITE_`） |
 | `SUPABASE_SERVICE_ROLE_KEY` | 服务端特权 key（**勿**进前端包） | 同上 |
 | `NODE_ENV` | `production` 时 [`server.ts`](../server.ts) 走静态 `dist/` | 部署平台 |
@@ -344,7 +357,7 @@ export const config = {
 
 ### 7.2 不在日志里打印密钥
 
-`server/ark-api.ts` 全文不出现 `ARK_API_KEY` 的明文 log；Express 的 `console.error` 只打 error 对象。
+`server/ark-api.ts` 全文不在日志中打印 `ARK_API_KEY` / `MOONSHOT_API_KEY` 明文；Express 的 `console.error` 只打 error 对象。
 
 **Don't**: 加调试日志 `console.log("client:", client)` —— OpenAI SDK 实例的某些字段可能包含部分 key。
 
@@ -400,16 +413,16 @@ const history = Array.isArray(b.messages)
 
 ## 9. 错误归一化与可观测性
 
-### 9.1 `formatArkFailure` 是统一出口
+### 9.1 各供应商 `formatFailure` 为统一出口
 
-[`server/ark-api.ts:12-59`](../server/ark-api.ts) 把 OpenAI SDK 的各种错误归类成"人话 + detail"：
+[`server/ark-api.ts`](../server/ark-api.ts) 在 `catch` 中调用当前 `LlmBackend` 的 `formatFailure`（方舟实现为 `formatArkFailure`，Kimi 为 [`server/llm/providers/kimi.ts`](../server/llm/providers/kimi.ts) 的 `formatKimiFailure`），把 OpenAI SDK 错误归类成「人话 + detail」：
 
-- 401 / unauthorized → "API Key 无效或未授权"
-- endpoint / not found / invalid model → "模型不可用，检查 ARK_BASE_URL / ARK_MODEL"
-- insufficient / balance / quota → "账户余额或调用额度不足"
-- 其它 → 默认提示
+- 401 / unauthorized → API Key 无效或未授权（文案随供应商指向对应控制台）
+- endpoint / not found / invalid model → 模型或接入点不可用
+- insufficient / balance / quota → 余额或额度不足
+- 其它 → 默认提示（含建议检查的 env 名）
 
-**Do**: 任何与方舟交互的代码路径都通过 `formatArkFailure(error)` 输出。前端的 toast / 错误页可以直接展示 `error` 字段，detail 字段在折叠区或调试态展示。
+**Do**: 与 LLM 交互的代码路径都通过活动后端的 `formatFailure` 输出。前端的 toast / 错误页可以直接展示 `error` 字段，detail 在折叠区或调试态展示。
 
 **Don't**: 把 SDK 的 error 直接 `JSON.stringify` 回前端。错误对象可能含 stack、请求体、临时 token，泄露面太大。
 
@@ -417,10 +430,7 @@ const history = Array.isArray(b.messages)
 
 各处的 `console.error` 都加了模块前缀：
 
-- [`server/ark-api.ts:152`](../server/ark-api.ts) `"Interpret API Error:"`
-- [`server/ark-api.ts:192`](../server/ark-api.ts) `"Chat API Error:"`
-- [`server/ark-api.ts:227`](../server/ark-api.ts) `"Interpret Stream Error:"`
-- [`server/ark-api.ts:273`](../server/ark-api.ts) `"Chat Stream Error:"`
+- [`server/ark-api.ts`](../server/ark-api.ts) `"Interpret API Error:"`、`"Deep Inquiry API Error:"`、`"Chat API Error:"`、`"Interpret Stream Error:"`、`"Chat Stream Error:"`
 - [`api/chat.ts:21`](../api/chat.ts) `"api/chat handler:"`
 
 **Do**: 在 Vercel Runtime Logs 通过前缀过滤问题。前缀格式 `<module> <event>:` 既可读又便于 grep。
@@ -565,7 +575,7 @@ app.get("*", (req, res) => {
 });
 ```
 
-**Do**: 自托管时把 `ARK_API_KEY` 注入进程环境（systemd / Docker env / pm2 ecosystem），别再依赖 `.env` 文件——容器重建可能丢。
+**Do**: 自托管时把当前提供商所需的密钥（`ARK_API_KEY` 或 `MOONSHOT_API_KEY`）及 `SEEME_AI_PROVIDER` 注入进程环境（systemd / Docker env / pm2 ecosystem），别再依赖 `.env` 文件——容器重建可能丢。
 
 **Don't**: 把 Express 部到 Vercel —— 会被识别为 Build Output，但失去 Serverless 自动扩缩容的优势，得不偿失。Express 应该部到 Railway / Fly.io / 阿里云 ECS 这类常驻进程平台。
 
@@ -576,11 +586,11 @@ app.get("*", (req, res) => {
 | 反模式 | 正确做法 |
 |--------|----------|
 | 在 `api/foo-bar.ts` 想匹配 `/api/foo/bar` | 新建 `api/foo/bar.ts` |
-| `ARK_API_KEY` 加 `VITE_` 前缀 | 永远只在 Node 环境读 |
-| 在 `api/*.ts` 里直接读 `process.env.ARK_API_KEY` | 通过 `getArkClient()` |
-| Prompt 写在前端或 handler 里 | 集中在 `server/ark-api.ts` |
+| `ARK_API_KEY` / `MOONSHOT_API_KEY` 加 `VITE_` 前缀 | 永远只在 Node 环境读 |
+| 在 `api/*.ts` 里直接读 `process.env.ARK_API_KEY` 或 `MOONSHOT_API_KEY` | 通过 `server/llm/registry.ts` 的 `getActiveLlmBackend()` |
+| Prompt 写在前端或 handler 里 | 集中在 `server/ark-api.ts` + `server/prompts/` |
 | 流式 handler 里 `throw` | 发 `data: {error}` + `[DONE]` 后 `res.end()` |
-| 错误对象 `JSON.stringify` 直接回前端 | 用 `formatArkFailure` 归一化 |
+| 错误对象 `JSON.stringify` 直接回前端 | 用活动后端 `formatFailure` 归一化 |
 | `console.log(req.body)` | 只打 length / hash |
 | `body.messages.map(...)` 不判数组 | `Array.isArray(b.messages) ? ... : []` |
 | 让前端能传 `role: "system"` | 白名单到 user / assistant |
@@ -594,6 +604,7 @@ app.get("*", (req, res) => {
 - [Vercel Functions 限制（官方）](https://vercel.com/docs/functions/limitations)
 - [Vercel Fluid Compute（2025-06 升级公告）](https://vercel.com/changelog/higher-defaults-and-limits-for-vercel-functions-running-fluid-compute)
 - [火山方舟 Coding Plan 文档](https://www.volcengine.com/docs/82379/1928261)
+- [Kimi K2.6 快速开始（OpenAI 兼容）](https://platform.kimi.com/docs/guide/kimi-k2-6-quickstart.md)
 - [OpenAI Node SDK 流式响应](https://github.com/openai/openai-node)
 - [Upstash Ratelimit](https://github.com/upstash/ratelimit-js)
 - [`docs/doc_index.md`](./doc_index.md) —— 渐进披露入口；环境变量与 Vercel 路由见上文 §7、§3

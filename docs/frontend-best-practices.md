@@ -121,7 +121,7 @@ define: {
 
 通过 `define` 把无前缀变量"伪装"成 `process.env.X` 注入。**能用，但不是 Vite 6 的推荐写法**。新增变量时优先用 `VITE_` 前缀，避免给后续维护者制造心智负担。
 
-**Don't**: 把后端密钥（`ARK_API_KEY` 等）误加 `VITE_` 前缀。一旦构建就会被打进客户端 bundle 永久泄露。
+**Don't**: 把后端 LLM 密钥（`ARK_API_KEY`、`MOONSHOT_API_KEY` 等）误加 `VITE_` 前缀。一旦构建就会被打进客户端 bundle 永久泄露。
 
 ### 4.3 HMR 与 `DISABLE_HMR`
 
@@ -283,9 +283,9 @@ v4 仍支持 `@apply`，但不是好实践。组件复用应当抽 React 组件�
 
 [`src/lib/ark-client.ts:15-16`](../src/lib/ark-client.ts) 的注释是铁律：
 
-> 当前实现：前端只走同源流式代理，不在浏览器直连方舟（避免 CORS / key 暴露）。
+> 当前实现：前端只走同源流式代理，不在浏览器直连大模型供应商域名（避免 CORS / key 暴露）。
 
-**Don't**: 在浏览器里直接 `fetch('https://ark.cn-beijing.volces.com/...')`。即便配了 CORS，`ARK_API_KEY` 也会经浏览器暴露。**任何"AI 调用"都必须走 `/api/*/stream`。**
+**Don't**: 在浏览器里直接 `fetch` 火山方舟或 Moonshot 等供应商 URL。即便配了 CORS，API Key 也会经浏览器暴露。**任何「AI 调用」都必须走 `/api/*/stream`（或同源 JSON 端点）。**
 
 ### 7.2 SSE 解析的标准实现
 
@@ -361,7 +361,7 @@ const normalizedInterpretation = useMemo(
 
 ### 9.2 SSE 错误显示
 
-后端会发结构化错误（[`server/ark-api.ts:12-59`](../server/ark-api.ts) 的 `formatArkFailure`），前端必须把 `err.message` 与 `err.detail` 拼起来展示，不要只显示 "请求失败"。本仓库 [`src/lib/ark-client.ts:157-161`](../src/lib/ark-client.ts) 已经做对了这件事：
+后端会发结构化错误（当前 `LlmBackend` 的 `formatFailure`，如方舟的 `formatArkFailure`），前端必须把 `err.message` 与 `err.detail` 拼起来展示，不要只显示 "请求失败"。本仓库 [`src/lib/ark-client.ts:157-161`](../src/lib/ark-client.ts) 已经做对了这件事：
 
 ```ts
 if (typeof err === "string" && err) {
@@ -433,7 +433,7 @@ const History = React.lazy(() => import("@/components/IChing/History"));
 | 反模式 | 正确做法 |
 |--------|----------|
 | 在组件里 `fetch('https://ark.cn-beijing.volces.com/...')` | 走 `/api/*/stream` 同源代理 |
-| 把 `ARK_API_KEY` 用 `VITE_` 暴露 | 永远只在服务端读 |
+| 把 `ARK_API_KEY` / `MOONSHOT_API_KEY` 用 `VITE_` 暴露 | 永远只在服务端读 |
 | `useState(new AbortController())` | `useRef<AbortController \| null>(null)` |
 | 在 useEffect 里嵌套订阅并从内层 return | 拆成两个 useEffect，按依赖分层 |
 | 模板字符串拼 className | `cn('a', cond && 'b')` |

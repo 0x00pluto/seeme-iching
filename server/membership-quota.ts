@@ -1,4 +1,4 @@
-import { createServerSupabase } from "./supabase-client.js";
+import { createServerSupabase } from "./supabase-client";
 
 const TIER_DISPLAY: Record<string, string> = {
   free: "免费",

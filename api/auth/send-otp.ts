@@ -2,8 +2,8 @@
  * Vercel Serverless：POST /api/auth/send-otp（发送邮箱魔法链接）
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { handleSendMagicLink } from "../../server/auth-handlers.js";
-import { buildAuthCallbackUrl, resolvePublicOrigin } from "../../server/public-origin.js";
+import { handleSendMagicLink } from "../../server/auth-handlers";
+import { buildAuthCallbackUrl, resolvePublicOrigin } from "../../server/public-origin";
 
 export const config = {
   runtime: "nodejs",

@@ -1,8 +1,8 @@
-import type { ArkStreamDelta } from "./ark-api.js";
-import { getSsePeriodicPingMs, sseEmptyModelDeltaHeartbeat } from "./sse-warmup.js";
+import type { ArkStreamDelta } from "./ark-api";
+import { getSsePeriodicPingMs, sseEmptyModelDeltaHeartbeat } from "./sse-warmup";
 
 /**
- * 将 ark-api 的 AsyncGenerator 按现有契约写入 HTTP SSE。
+ * 将 `ark-api` 产出的 AsyncGenerator（经 `LlmBackend` 上游）按现有契约写入 HTTP SSE。
  * Express 与 Vercel 共用：首包 model token 前可能长时间无真实文本，定时下发空 `data:` delta 保活（与 handler 首包一致）。
  */
 export async function pipeArkStreamToSse(

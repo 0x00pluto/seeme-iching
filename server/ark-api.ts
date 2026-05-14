@@ -1,77 +1,31 @@
 /**
- * 方舟 AI 调用逻辑：供 Express（本机/自建 Node）与 Vercel Serverless（api/*）共用。
+ * LLM 业务编排（观心报告 / 深入问句 / 深度对话）：供 Express 与 Vercel `api/*` 共用。
+ * 供应商细节见 `server/llm/`（`getActiveLlmBackend()`），此处不写 if(provider)。
  */
 import OpenAI from "openai";
-import { buildDeepInquiryUserPrompt } from "./prompts/deep-inquiry.js";
-import { buildInterpretReportUserPrompt } from "./prompts/interpret-report.js";
-import { buildChatSystemInstruction } from "./prompts/chat-dialogue.js";
+import { buildDeepInquiryUserPrompt } from "./prompts/deep-inquiry";
+import { buildInterpretReportUserPrompt } from "./prompts/interpret-report";
+import { buildChatSystemInstruction } from "./prompts/chat-dialogue";
+import { getActiveLlmBackend } from "./llm/registry";
+import type { LlmBackend } from "./llm/types";
 
-export const ARK_BASE_URL_DEFAULT = "https://ark.cn-beijing.volces.com/api/coding/v3";
-export const ARK_MODEL_DEFAULT = "ark-code-latest";
+export type { AiProvider } from "./llm/types";
+export { resolveAiProvider } from "./llm-provider";
+export {
+  ARK_BASE_URL_DEFAULT,
+  ARK_MODEL_DEFAULT,
+  ERR_NO_ARK_KEY,
+  formatArkFailure,
+  getArkClient,
+  getArkModelId,
+} from "./llm/providers/ark";
 
-export const ERR_NO_ARK_KEY =
-  "服务端未配置 ARK_API_KEY。请在火山方舟控制台创建 API Key 并写入环境变量：https://www.volcengine.com/docs/82379/1541594";
-
-export function formatArkFailure(error: unknown): { error: string; detail: string } {
-  const detail = error instanceof Error ? error.message : String(error);
-  const lower = detail.toLowerCase();
-
-  if (
-    lower.includes("401") ||
-    lower.includes("unauthorized") ||
-    lower.includes("invalid api key") ||
-    lower.includes("invalid_api_key")
-  ) {
-    return {
-      error: "API Key 无效或未授权。请检查环境变量 ARK_API_KEY 是否与火山方舟控制台一致。",
-      detail,
-    };
-  }
-
-  if (
-    lower.includes("endpoint") ||
-    lower.includes("not found") ||
-    lower.includes("invalid model") ||
-    lower.includes("does not exist")
-  ) {
-    return {
-      error:
-        "模型不可用。Coding Plan 默认使用 ARK_MODEL=ark-code-latest；若使用常规在线推理，请将 ARK_BASE_URL 设为 .../api/v3 且 ARK_MODEL 为接入点 ID（ep- 开头）。",
-      detail,
-    };
-  }
-
-  if (
-    lower.includes("insufficient") ||
-    lower.includes("balance") ||
-    lower.includes("quota") ||
-    lower.includes("余额") ||
-    lower.includes("欠费")
-  ) {
-    return {
-      error: "账户余额或调用额度不足，请前往火山引擎控制台检查计费与配额。",
-      detail,
-    };
-  }
-
-  return {
-    error:
-      "AI 调用失败，请检查网络、ARK_API_KEY、ARK_BASE_URL（Coding 用 .../api/coding/v3）与 ARK_MODEL（默认 ark-code-latest 或 ep- 接入点）。",
-    detail,
-  };
-}
-
-export function getArkClient() {
-  const apiKey = process.env.ARK_API_KEY?.trim();
-  if (!apiKey) return null;
-  return new OpenAI({
-    apiKey,
-    baseURL: process.env.ARK_BASE_URL?.trim() || ARK_BASE_URL_DEFAULT,
-  });
-}
-
-export function getArkModelId(): string {
-  return process.env.ARK_MODEL?.trim() || ARK_MODEL_DEFAULT;
+/** 不向用户展示 Kimi thinking / reasoning，只取正文 `content`。 */
+function chatCompletionAssistantContentOnly(
+  message: { content?: string | null; reasoning_content?: unknown } | null | undefined
+): string {
+  if (!message || typeof message !== "object") return "";
+  return message.content ?? "";
 }
 
 function parseDeepInquiryJson(text: string): string[] | null {
@@ -96,7 +50,36 @@ export type ArkStreamDelta =
   | { type: "error"; error: string; detail?: string }
   | { type: "done" };
 
+async function* streamTextDeltas(
+  llm: LlmBackend,
+  params: Omit<OpenAI.Chat.ChatCompletionCreateParams, "model" | "stream"> & {
+    model?: string;
+    stream: true;
+  }
+): AsyncGenerator<ArkStreamDelta, void, void> {
+  const client = llm.getOpenAI();
+  if (!client) {
+    yield { type: "error", error: llm.errNoKey };
+    return;
+  }
+  const raw = await client.chat.completions.create(
+    llm.patchCompletionParams({
+      ...params,
+      model: params.model ?? llm.getModelId(),
+      stream: true,
+    })
+  );
+  const stream = raw as AsyncIterable<OpenAI.Chat.ChatCompletionChunk>;
+  for await (const chunk of stream) {
+    const rawDelta = chunk.choices?.[0]?.delta as { content?: string | null; reasoning_content?: unknown } | undefined;
+    const delta = rawDelta?.content ?? "";
+    if (delta) yield { type: "delta", delta };
+  }
+  yield { type: "done" };
+}
+
 export async function runInterpretApi(body: unknown): Promise<{ status: number; json: ArkJsonResponse }> {
+  const llm = getActiveLlmBackend();
   try {
     const b = body as {
       question?: unknown;
@@ -105,27 +88,32 @@ export async function runInterpretApi(body: unknown): Promise<{ status: number; 
       cuoGua?: unknown;
       zongGua?: unknown;
     };
-    const client = getArkClient();
-    if (!client) {
-      return { status: 500, json: { error: ERR_NO_ARK_KEY } };
-    }
-    const modelId = getArkModelId();
     const userContent = buildInterpretReportUserPrompt(b.question, b.benGua, b.huGua, b.cuoGua, b.zongGua);
-    const completion = (await client.chat.completions.create({
-      model: modelId,
-      messages: [{ role: "user", content: userContent }],
-      stream: false,
-    })) as OpenAI.Chat.ChatCompletion;
-    const text = completion.choices[0]?.message?.content ?? "";
+
+    const client = llm.getOpenAI();
+    if (!client) {
+      return { status: 500, json: { error: llm.errNoKey } };
+    }
+    const completion = (await client.chat.completions.create(
+      llm.patchCompletionParams({
+        model: llm.getModelId(),
+        messages: [{ role: "user", content: userContent }],
+        stream: false,
+      })
+    )) as OpenAI.Chat.ChatCompletion;
+    const text = chatCompletionAssistantContentOnly(
+      completion.choices[0]?.message as { content?: string | null; reasoning_content?: unknown }
+    );
     return { status: 200, json: { text } };
   } catch (error) {
     console.error("Interpret API Error:", error);
-    const { error: msg, detail } = formatArkFailure(error);
+    const { error: msg, detail } = llm.formatFailure(error);
     return { status: 500, json: { error: msg, detail } };
   }
 }
 
 export async function runDeepInquiryApi(body: unknown): Promise<{ status: number; json: ArkJsonResponse }> {
+  const llm = getActiveLlmBackend();
   try {
     const b = body as {
       question?: unknown;
@@ -145,11 +133,6 @@ export async function runDeepInquiryApi(body: unknown): Promise<{ status: number
     const cuoName = (b.cuoGua as { name?: string } | undefined)?.name?.trim() || "未知";
     const zongName = (b.zongGua as { name?: string } | undefined)?.name?.trim() || "未知";
 
-    const client = getArkClient();
-    if (!client) {
-      return { status: 500, json: { error: ERR_NO_ARK_KEY } };
-    }
-    const modelId = getArkModelId();
     const userContent = buildDeepInquiryUserPrompt({
       question,
       interpretation,
@@ -159,14 +142,22 @@ export async function runDeepInquiryApi(body: unknown): Promise<{ status: number
       zongName,
     });
 
-    const completion = (await client.chat.completions.create({
-      model: modelId,
-      messages: [{ role: "user", content: userContent }],
-      stream: false,
-      response_format: { type: "json_object" },
-    })) as OpenAI.Chat.ChatCompletion;
+    const client = llm.getOpenAI();
+    if (!client) {
+      return { status: 500, json: { error: llm.errNoKey } };
+    }
+    const completion = (await client.chat.completions.create(
+      llm.patchCompletionParams({
+        model: llm.getModelId(),
+        messages: [{ role: "user", content: userContent }],
+        stream: false,
+        response_format: { type: "json_object" },
+      })
+    )) as OpenAI.Chat.ChatCompletion;
 
-    const text = completion.choices[0]?.message?.content ?? "";
+    const text = chatCompletionAssistantContentOnly(
+      completion.choices[0]?.message as { content?: string | null; reasoning_content?: unknown }
+    );
     const deepInquiry = parseDeepInquiryJson(text);
     if (!deepInquiry) {
       return {
@@ -180,12 +171,13 @@ export async function runDeepInquiryApi(body: unknown): Promise<{ status: number
     return { status: 200, json: { deepInquiry } };
   } catch (error) {
     console.error("Deep Inquiry API Error:", error);
-    const { error: msg, detail } = formatArkFailure(error);
+    const { error: msg, detail } = llm.formatFailure(error);
     return { status: 500, json: { error: msg, detail } };
   }
 }
 
 export async function runChatApi(body: unknown): Promise<{ status: number; json: ArkJsonResponse }> {
+  const llm = getActiveLlmBackend();
   try {
     const b = body as {
       messages?: { role: string; content: string }[];
@@ -195,11 +187,6 @@ export async function runChatApi(body: unknown): Promise<{ status: number; json:
       input?: unknown;
       direction?: unknown;
     };
-    const client = getArkClient();
-    if (!client) {
-      return { status: 500, json: { error: ERR_NO_ARK_KEY } };
-    }
-    const modelId = getArkModelId();
     const systemInstruction = buildChatSystemInstruction(b.question, b.interpretation, b.round, b.direction);
     const history = Array.isArray(b.messages)
       ? b.messages.map((m) => ({
@@ -212,21 +199,31 @@ export async function runChatApi(body: unknown): Promise<{ status: number; json:
       ...history,
       { role: "user", content: String(b.input ?? "") },
     ];
-    const completion = (await client.chat.completions.create({
-      model: modelId,
-      messages: chatMessages,
-      stream: false,
-    })) as OpenAI.Chat.ChatCompletion;
-    const text = completion.choices[0]?.message?.content ?? "";
+
+    const client = llm.getOpenAI();
+    if (!client) {
+      return { status: 500, json: { error: llm.errNoKey } };
+    }
+    const completion = (await client.chat.completions.create(
+      llm.patchCompletionParams({
+        model: llm.getModelId(),
+        messages: chatMessages,
+        stream: false,
+      })
+    )) as OpenAI.Chat.ChatCompletion;
+    const text = chatCompletionAssistantContentOnly(
+      completion.choices[0]?.message as { content?: string | null; reasoning_content?: unknown }
+    );
     return { status: 200, json: { text } };
   } catch (error) {
     console.error("Chat API Error:", error);
-    const { error: msg, detail } = formatArkFailure(error);
+    const { error: msg, detail } = llm.formatFailure(error);
     return { status: 500, json: { error: msg, detail } };
   }
 }
 
 export async function* runInterpretStream(body: unknown): AsyncGenerator<ArkStreamDelta, void, void> {
+  const llm = getActiveLlmBackend();
   try {
     const b = body as {
       question?: unknown;
@@ -235,33 +232,20 @@ export async function* runInterpretStream(body: unknown): AsyncGenerator<ArkStre
       cuoGua?: unknown;
       zongGua?: unknown;
     };
-    const client = getArkClient();
-    if (!client) {
-      yield { type: "error", error: ERR_NO_ARK_KEY };
-      return;
-    }
-    const modelId = getArkModelId();
     const userContent = buildInterpretReportUserPrompt(b.question, b.benGua, b.huGua, b.cuoGua, b.zongGua);
-
-    const stream = await client.chat.completions.create({
-      model: modelId,
+    yield* streamTextDeltas(llm, {
       messages: [{ role: "user", content: userContent }],
       stream: true,
     });
-
-    for await (const chunk of stream) {
-      const delta = chunk.choices?.[0]?.delta?.content ?? "";
-      if (delta) yield { type: "delta", delta };
-    }
-    yield { type: "done" };
   } catch (error) {
     console.error("Interpret Stream Error:", error);
-    const { error: msg, detail } = formatArkFailure(error);
+    const { error: msg, detail } = llm.formatFailure(error);
     yield { type: "error", error: msg, detail };
   }
 }
 
 export async function* runChatStream(body: unknown): AsyncGenerator<ArkStreamDelta, void, void> {
+  const llm = getActiveLlmBackend();
   try {
     const b = body as {
       messages?: { role: string; content: string }[];
@@ -271,12 +255,6 @@ export async function* runChatStream(body: unknown): AsyncGenerator<ArkStreamDel
       input?: unknown;
       direction?: unknown;
     };
-    const client = getArkClient();
-    if (!client) {
-      yield { type: "error", error: ERR_NO_ARK_KEY };
-      return;
-    }
-    const modelId = getArkModelId();
     const systemInstruction = buildChatSystemInstruction(b.question, b.interpretation, b.round, b.direction);
     const history = Array.isArray(b.messages)
       ? b.messages.map((m) => ({
@@ -289,21 +267,10 @@ export async function* runChatStream(body: unknown): AsyncGenerator<ArkStreamDel
       ...history,
       { role: "user", content: String(b.input ?? "") },
     ];
-
-    const stream = await client.chat.completions.create({
-      model: modelId,
-      messages: chatMessages,
-      stream: true,
-    });
-
-    for await (const chunk of stream) {
-      const delta = chunk.choices?.[0]?.delta?.content ?? "";
-      if (delta) yield { type: "delta", delta };
-    }
-    yield { type: "done" };
+    yield* streamTextDeltas(llm, { messages: chatMessages, stream: true });
   } catch (error) {
     console.error("Chat Stream Error:", error);
-    const { error: msg, detail } = formatArkFailure(error);
+    const { error: msg, detail } = llm.formatFailure(error);
     yield { type: "error", error: msg, detail };
   }
 }

@@ -1,3 +1,6 @@
+/**
+ * Express 入口：`/api/*` 与 `server/ark-api.ts` 共用逻辑；LLM 供应商由 `SEEME_AI_PROVIDER`（ark | kimi）决定，见 `server/llm/resolve.ts` 与 `server/llm/registry.ts`。
+ */
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
@@ -8,26 +11,26 @@ import {
   runDeepInquiryApi,
   runInterpretApi,
   runInterpretStream,
-} from "./server/ark-api.js";
-import { pipeArkStreamToSse } from "./server/pipe-ark-sse.js";
-import { flushHeadersAndInitialSsePing } from "./server/sse-warmup.js";
-import { probeSupabaseConnectivity } from "./server/supabase-client.js";
+} from "./server/ark-api";
+import { pipeArkStreamToSse } from "./server/pipe-ark-sse";
+import { flushHeadersAndInitialSsePing } from "./server/sse-warmup";
+import { probeSupabaseConnectivity } from "./server/supabase-client";
 import {
   handleSendMagicLink,
   handleExchangeSession,
   handleLogout,
   handleMe,
-} from "./server/auth-handlers.js";
-import { consumeInterpretQuota, isQuotaBackendConfigured } from "./server/membership-quota.js";
+} from "./server/auth-handlers";
+import { consumeInterpretQuota, isQuotaBackendConfigured } from "./server/membership-quota";
 import {
   handleArchivesDeleteAll,
   handleArchivesDeleteOne,
   handleArchivesGet,
   handleArchivesPost,
-} from "./server/archives-handlers.js";
-import { requireAuth, UNAUTHORIZED_RESPONSE } from "./server/require-auth.js";
-import { appendSessionCookie, appendClearSessionCookie } from "./server/user-session-cookie.js";
-import { buildAuthCallbackUrl, resolvePublicOrigin } from "./server/public-origin.js";
+} from "./server/archives-handlers";
+import { requireAuth, UNAUTHORIZED_RESPONSE } from "./server/require-auth";
+import { appendSessionCookie, appendClearSessionCookie } from "./server/user-session-cookie";
+import { buildAuthCallbackUrl, resolvePublicOrigin } from "./server/public-origin";
 
 dotenv.config();
 

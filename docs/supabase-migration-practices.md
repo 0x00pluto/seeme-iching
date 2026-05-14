@@ -2,7 +2,7 @@
 
 面向在本仓库改 **数据库结构**（DDL、RLS、policy、索引等）的开发者与 AI 助手。协作总入口见 [`docs/doc_index.md`](./doc_index.md)。
 
-> **与 [`backend-best-practices.md`](./backend-best-practices.md) 的分工**：后者讲 Express / Vercel、`ARK_*`、路由与流式；**本文只讲 schema 生命周期**（`supabase/migrations/`、CLI、`link`、RLS 习惯）。应用侧如何调 Supabase 见 [`server/supabase-client.ts`](../server/supabase-client.ts) 与后端文档 §7。
+> **与 [`backend-best-practices.md`](./backend-best-practices.md) 的分工**：后者讲 Express / Vercel、LLM 提供商（`SEEME_AI_PROVIDER`、`ARK_*`、`MOONSHOT_*`）、路由与流式；**本文只讲 schema 生命周期**（`supabase/migrations/`、CLI、`link`、RLS 习惯）。应用侧如何调 Supabase 见 [`server/supabase-client.ts`](../server/supabase-client.ts) 与后端文档 §7。
 
 ---
 

@@ -12,7 +12,7 @@
 
 ## 技术画像（极简）
 
-- **栈**：React、TypeScript、Vite、Tailwind；本地 **Express**（`server.ts`）与 **Vercel** `api/*` 共用 [`server/ark-api.ts`](server/ark-api.ts)；AI 为火山方舟 OpenAI 兼容端。
+- **栈**：React、TypeScript、Vite、Tailwind；本地 **Express**（`server.ts`）与 **Vercel** `api/*` 共用 [`server/ark-api.ts`](server/ark-api.ts)（[`server/llm/registry.ts`](server/llm/registry.ts) 在 **火山方舟** 与 **Kimi Moonshot** OpenAI 兼容端之间切换；解析见 [`server/llm/resolve.ts`](server/llm/resolve.ts)）。
 - **包管理**：**pnpm**（以 `pnpm-lock.yaml` 为准）。
 
 ## 常用命令
@@ -28,7 +28,7 @@
 
 | 方向 | 入口 |
 |------|------|
-| AI 行为、interpret/chat、密钥侧逻辑 | [`server/ark-api.ts`](server/ark-api.ts) |
+| AI 行为、interpret/chat、密钥侧逻辑 | [`server/ark-api.ts`](server/ark-api.ts)、[`server/llm/`](server/llm/)（`registry.ts`、`providers/*`）、[`server/llm-provider.ts`](server/llm-provider.ts)（兼容 re-export） |
 | Supabase（服务端客户端、迁移、健康检查） | [`server/supabase-client.ts`](server/supabase-client.ts)、[`supabase/migrations/`](supabase/migrations/)、[`api/health/supabase.ts`](api/health/supabase.ts) |
 | 本地 HTTP 与静态资源 | [`server.ts`](server.ts) |
 | 托管平台无服务器路由 | [`api/`](api/) |
