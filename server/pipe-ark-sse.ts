@@ -1,5 +1,5 @@
-import type { ArkStreamDelta } from "./ark-api";
-import { getSsePeriodicPingMs, sseEmptyModelDeltaHeartbeat } from "./sse-warmup";
+import type { ArkStreamDelta } from "./ark-api.js";
+import { getSsePeriodicPingMs, sseEmptyModelDeltaHeartbeat } from "./sse-warmup.js";
 
 /**
  * 将 `ark-api` 产出的 AsyncGenerator（经 `LlmBackend` 上游）按现有契约写入 HTTP SSE。

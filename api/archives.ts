@@ -6,8 +6,8 @@ import {
   handleArchivesDeleteAll,
   handleArchivesGet,
   handleArchivesPost,
-} from "../server/archives-handlers";
-import { requireAuth, UNAUTHORIZED_RESPONSE } from "../server/require-auth";
+} from "../server/archives-handlers.js";
+import { requireAuth, UNAUTHORIZED_RESPONSE } from "../server/require-auth.js";
 
 export const config = {
   runtime: "nodejs",

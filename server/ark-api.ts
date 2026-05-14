@@ -3,14 +3,14 @@
  * 供应商细节见 `server/llm/`（`getActiveLlmBackend()`），此处不写 if(provider)。
  */
 import OpenAI from "openai";
-import { buildDeepInquiryUserPrompt } from "./prompts/deep-inquiry";
-import { buildInterpretReportUserPrompt } from "./prompts/interpret-report";
-import { buildChatSystemInstruction } from "./prompts/chat-dialogue";
-import { getActiveLlmBackend } from "./llm/registry";
-import type { LlmBackend } from "./llm/types";
+import { buildDeepInquiryUserPrompt } from "./prompts/deep-inquiry.js";
+import { buildInterpretReportUserPrompt } from "./prompts/interpret-report.js";
+import { buildChatSystemInstruction } from "./prompts/chat-dialogue.js";
+import { getActiveLlmBackend } from "./llm/registry.js";
+import type { LlmBackend } from "./llm/types.js";
 
-export type { AiProvider } from "./llm/types";
-export { resolveAiProvider } from "./llm-provider";
+export type { AiProvider } from "./llm/types.js";
+export { resolveAiProvider } from "./llm-provider.js";
 export {
   ARK_BASE_URL_DEFAULT,
   ARK_MODEL_DEFAULT,
@@ -18,7 +18,7 @@ export {
   formatArkFailure,
   getArkClient,
   getArkModelId,
-} from "./llm/providers/ark";
+} from "./llm/providers/ark.js";
 
 /** 不向用户展示 Kimi thinking / reasoning，只取正文 `content`。 */
 function chatCompletionAssistantContentOnly(

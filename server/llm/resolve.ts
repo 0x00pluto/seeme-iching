@@ -1,4 +1,4 @@
-import type { AiProvider } from "./types";
+import type { AiProvider } from "./types.js";
 
 function normalizeProvider(raw: string): AiProvider | null {
   const v = raw.trim().toLowerCase();

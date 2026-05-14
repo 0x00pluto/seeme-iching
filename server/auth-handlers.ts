@@ -1,5 +1,5 @@
-import { fetchEntitlementsPayload, isQuotaBackendConfigured } from "./membership-quota";
-import { getSupabaseAuthClient } from "./supabase-auth-client";
+import { fetchEntitlementsPayload, isQuotaBackendConfigured } from "./membership-quota.js";
+import { getSupabaseAuthClient } from "./supabase-auth-client.js";
 import {
   encodeUserSessionToken,
   getSessionTtlSeconds,
@@ -7,7 +7,7 @@ import {
   readCookieValue,
   USER_SESSION_COOKIE_NAME,
   type UserSessionPayload,
-} from "./user-session-cookie";
+} from "./user-session-cookie.js";
 
 function normalizeEmail(email: unknown): string {
   return String(email ?? "")

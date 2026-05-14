@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { LlmBackend } from "../types";
+import type { LlmBackend } from "../types.js";
 
 export const MOONSHOT_BASE_URL_DEFAULT = "https://api.moonshot.cn/v1";
 export const KIMI_MODEL_DEFAULT = "kimi-k2.6";

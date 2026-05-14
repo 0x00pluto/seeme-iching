@@ -4,11 +4,11 @@
  * 注意：在 Vercel 上仍会受 maxDuration 限制（当前 300s），SSE 到点会被掐断。
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { runInterpretStream } from "../../server/ark-api";
-import { consumeInterpretQuota, isQuotaBackendConfigured } from "../../server/membership-quota";
-import { pipeArkStreamToSse } from "../../server/pipe-ark-sse";
-import { requireAuth, UNAUTHORIZED_RESPONSE } from "../../server/require-auth";
-import { flushHeadersAndInitialSsePing } from "../../server/sse-warmup";
+import { runInterpretStream } from "../../server/ark-api.js";
+import { consumeInterpretQuota, isQuotaBackendConfigured } from "../../server/membership-quota.js";
+import { pipeArkStreamToSse } from "../../server/pipe-ark-sse.js";
+import { requireAuth, UNAUTHORIZED_RESPONSE } from "../../server/require-auth.js";
+import { flushHeadersAndInitialSsePing } from "../../server/sse-warmup.js";
 
 export const config = {
   runtime: "nodejs",

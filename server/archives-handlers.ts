@@ -1,6 +1,6 @@
-import { createServerSupabase } from "./supabase-client";
-import { getSessionFromRequest } from "./auth-handlers";
-import { isQuotaBackendConfigured } from "./membership-quota";
+import { createServerSupabase } from "./supabase-client.js";
+import { getSessionFromRequest } from "./auth-handlers.js";
+import { isQuotaBackendConfigured } from "./membership-quota.js";
 
 /** 观心档案接口：依赖 Cookie 会话；无 session 时各 handler 返回 401（与 Express/Vercel 外层 `requireAuth` 双保险）。 */
 

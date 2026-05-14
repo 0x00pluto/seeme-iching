@@ -3,8 +3,8 @@
  * 用魔法链接回调中的 access_token 换取本站签名 Cookie。
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { handleExchangeSession } from "../../server/auth-handlers";
-import { appendSessionCookie } from "../../server/user-session-cookie";
+import { handleExchangeSession } from "../../server/auth-handlers.js";
+import { appendSessionCookie } from "../../server/user-session-cookie.js";
 
 export const config = {
   runtime: "nodejs",

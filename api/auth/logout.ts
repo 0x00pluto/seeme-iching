@@ -2,8 +2,8 @@
  * Vercel Serverless：POST /api/auth/logout
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { handleLogout } from "../../server/auth-handlers";
-import { appendClearSessionCookie } from "../../server/user-session-cookie";
+import { handleLogout } from "../../server/auth-handlers.js";
+import { appendClearSessionCookie } from "../../server/user-session-cookie.js";
 
 export const config = {
   runtime: "nodejs",

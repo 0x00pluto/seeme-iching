@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { LlmBackend } from "../types";
+import type { LlmBackend } from "../types.js";
 
 export const ARK_BASE_URL_DEFAULT = "https://ark.cn-beijing.volces.com/api/coding/v3";
 export const ARK_MODEL_DEFAULT = "ark-code-latest";

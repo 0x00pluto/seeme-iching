@@ -3,7 +3,7 @@
  * Verifies SUPABASE_* env and a PostgREST read on public.connectivity_check.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { probeSupabaseConnectivity } from "../../server/supabase-client";
+import { probeSupabaseConnectivity } from "../../server/supabase-client.js";
 
 export const config = {
   runtime: "nodejs",

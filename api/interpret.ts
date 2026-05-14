@@ -3,8 +3,8 @@
  * 与本地 Express 共用 `server/ark-api.ts` 逻辑；按 `SEEME_AI_PROVIDER` 经 `server/llm/registry` 选择方舟（ARK_*）或 Kimi（MOONSHOT_* 等）。
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { runInterpretApi } from "../server/ark-api";
-import { requireAuth, UNAUTHORIZED_RESPONSE } from "../server/require-auth";
+import { runInterpretApi } from "../server/ark-api.js";
+import { requireAuth, UNAUTHORIZED_RESPONSE } from "../server/require-auth.js";
 
 /** 显式 Node 运行时：OpenAI SDK 依赖 Node API，勿用 Edge。 */
 export const config = {

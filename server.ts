@@ -11,26 +11,26 @@ import {
   runDeepInquiryApi,
   runInterpretApi,
   runInterpretStream,
-} from "./server/ark-api";
-import { pipeArkStreamToSse } from "./server/pipe-ark-sse";
-import { flushHeadersAndInitialSsePing } from "./server/sse-warmup";
-import { probeSupabaseConnectivity } from "./server/supabase-client";
+} from "./server/ark-api.js";
+import { pipeArkStreamToSse } from "./server/pipe-ark-sse.js";
+import { flushHeadersAndInitialSsePing } from "./server/sse-warmup.js";
+import { probeSupabaseConnectivity } from "./server/supabase-client.js";
 import {
   handleSendMagicLink,
   handleExchangeSession,
   handleLogout,
   handleMe,
-} from "./server/auth-handlers";
-import { consumeInterpretQuota, isQuotaBackendConfigured } from "./server/membership-quota";
+} from "./server/auth-handlers.js";
+import { consumeInterpretQuota, isQuotaBackendConfigured } from "./server/membership-quota.js";
 import {
   handleArchivesDeleteAll,
   handleArchivesDeleteOne,
   handleArchivesGet,
   handleArchivesPost,
-} from "./server/archives-handlers";
-import { requireAuth, UNAUTHORIZED_RESPONSE } from "./server/require-auth";
-import { appendSessionCookie, appendClearSessionCookie } from "./server/user-session-cookie";
-import { buildAuthCallbackUrl, resolvePublicOrigin } from "./server/public-origin";
+} from "./server/archives-handlers.js";
+import { requireAuth, UNAUTHORIZED_RESPONSE } from "./server/require-auth.js";
+import { appendSessionCookie, appendClearSessionCookie } from "./server/user-session-cookie.js";
+import { buildAuthCallbackUrl, resolvePublicOrigin } from "./server/public-origin.js";
 
 dotenv.config();
 

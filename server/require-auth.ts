@@ -1,5 +1,5 @@
-import { getSessionFromRequest } from "./auth-handlers";
-import type { UserSessionPayload } from "./user-session-cookie";
+import { getSessionFromRequest } from "./auth-handlers.js";
+import type { UserSessionPayload } from "./user-session-cookie.js";
 
 /** 未登录 / 会话失效时统一返回的 401 响应体；调用方决定 res.status().json()。 */
 export const UNAUTHORIZED_RESPONSE = {

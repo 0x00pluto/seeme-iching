@@ -2,7 +2,7 @@
  * Vercel Serverless：GET /api/auth/me
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { handleMe } from "../../server/auth-handlers";
+import { handleMe } from "../../server/auth-handlers.js";
 
 export const config = {
   runtime: "nodejs",
