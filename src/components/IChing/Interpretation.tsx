@@ -1,4 +1,5 @@
 import { fetchDeepInquiry, InterpretDailyQuotaError, streamInterpret } from "@/lib/ark-client";
+import { normalizeMarkdownTables } from "@/lib/normalize-markdown-report";
 import { HEXAGRAMS, LineType, getBinary, getCuoGuaLines, getHuGuaLines, getZongGuaLines } from "@/lib/iching";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -12,13 +13,15 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { AnimatePresence, motion } from "framer-motion";
-import { BookOpen, Compass, Eye, Ghost, Heart, Loader2, Share2 } from "lucide-react";
+import { Ban, BookOpen, ClipboardCopy, Compass, Eye, Ghost, Heart, Loader2, Share2 } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { DeepDialogue } from "./DeepDialogue";
 import { Hexagram } from "./Hexagram";
+import type { HistoryItem } from "./History";
+import { deleteArchiveShare, postArchiveShare } from "@/lib/share-api";
 
 interface InterpretationProps {
   lines: LineType[];
@@ -33,13 +36,17 @@ interface InterpretationProps {
   cachedDeepInquiryQuestions?: string[];
   /** 会员专享：镜下深入对话；免费档为 false */
   canUseDeepFollowUp?: boolean;
+  /** 已登录且档案后端可用时，可生成分享短链 */
+  archivesShareEnabled?: boolean;
+  /** 用于分享/撤销 API 的档案 id：档案入口为档案 id；当场保存后为父组件写入的 savedReportId */
+  shareReportId?: string | null;
+  /** 从档案打开时：列表接口给出的当前是否仍有有效分享 */
+  initialShareActive?: boolean;
   onSave?: (payload: {
     interpretation: string;
     deepInquiryQuestions?: string[];
-  }) => void | Promise<void>;
+  }) => void | Promise<void | HistoryItem>;
 }
-
-const TABLE_SEPARATOR_REGEX = /\|(?:\s*:?-{3,}:?\s*\|)+/g;
 
 const SELF_OBSERVATION_QUOTE =
   "照见不是为了判定对错，而是为了在叙事里多一个温柔的停顿；当你写下觉察时，故事便有了可以改写的一笔。";
@@ -99,52 +106,6 @@ function SeemingSpinnerGlyph() {
   );
 }
 
-function normalizeMarkdownTables(markdown: string): string {
-  if (!markdown.includes("|")) return markdown;
-
-  let normalized = markdown.replace(/\r\n/g, "\n").replace(/\|\s+\|/g, "|\n|");
-
-  normalized = normalized.replace(/([^\n])(\|(?:\s*:?-{3,}:?\s*\|)+)/g, "$1\n$2");
-  normalized = normalized.replace(/(\|(?:\s*:?-{3,}:?\s*\|)+)([^\n])/g, "$1\n$2");
-
-  const lines = normalized.split("\n");
-  const fixedLines: string[] = [];
-
-  for (const line of lines) {
-    if (!line.includes("|")) {
-      fixedLines.push(line);
-      continue;
-    }
-
-    const trimmed = line.trim();
-
-    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
-      fixedLines.push(trimmed);
-      continue;
-    }
-
-    const firstPipe = line.indexOf("|");
-    const lastPipe = line.lastIndexOf("|");
-    if (firstPipe > 0 && lastPipe > firstPipe) {
-      const prefix = line.slice(0, firstPipe).trimEnd();
-      const row = line.slice(firstPipe, lastPipe + 1).trim();
-      const suffix = line.slice(lastPipe + 1).trimStart();
-      if (prefix) fixedLines.push(prefix);
-      fixedLines.push(row);
-      if (suffix) fixedLines.push(suffix);
-      continue;
-    }
-
-    fixedLines.push(line);
-  }
-
-  return fixedLines
-    .join("\n")
-    .replace(TABLE_SEPARATOR_REGEX, (match) => `\n${match.trim()}\n`)
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
 export const Interpretation: React.FC<InterpretationProps> = ({
   lines,
   question,
@@ -153,6 +114,9 @@ export const Interpretation: React.FC<InterpretationProps> = ({
   cachedMarkdown,
   cachedDeepInquiryQuestions,
   canUseDeepFollowUp = false,
+  archivesShareEnabled = false,
+  shareReportId = null,
+  initialShareActive,
   onSave,
 }) => {
   const [interpretation, setInterpretation] = useState<string>("");
@@ -165,6 +129,13 @@ export const Interpretation: React.FC<InterpretationProps> = ({
   const [deepInquiryLoading, setDeepInquiryLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveDone, setSaveDone] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [stopShareBusy, setStopShareBusy] = useState(false);
+  const [copyShareLinkBusy, setCopyShareLinkBusy] = useState(false);
+  /** 当场保存后父组件可能尚未重渲染 shareReportId，用返回值兜底 */
+  const [savedItemId, setSavedItemId] = useState<string | null>(null);
+  /** 仅在有活跃分享时展示「停止分享」；当场分享成功会置 true */
+  const [hasActiveShare, setHasActiveShare] = useState(false);
   const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const deepInquiryAbortRef = useRef<AbortController | null>(null);
@@ -174,7 +145,9 @@ export const Interpretation: React.FC<InterpretationProps> = ({
   useEffect(() => {
     setSaveDone(false);
     setSaveLoading(false);
-  }, [dialogueAnchorId, cachedMarkdown]);
+    setSavedItemId(null);
+    setHasActiveShare(Boolean(initialShareActive));
+  }, [dialogueAnchorId, cachedMarkdown, initialShareActive]);
 
   const benLines = lines;
   const huLines = getHuGuaLines(lines);
@@ -353,20 +326,120 @@ export const Interpretation: React.FC<InterpretationProps> = ({
     interpretation.trim().length > 0 &&
     !interpretation.trim().startsWith("未能生成解读");
 
-  const handleShare = () => {
-    const shareUrl = process.env.APP_URL || window.location.origin;
-    const shareText = `我在镜微易经获得了一份观心报告：${benGua?.name}卦。针对我的困惑：“${question}”，这里照见的是叙事与感受，而非断言。`;
-    if (navigator.share) {
-      navigator
-        .share({
+  const buildSavePayload = (): {
+    interpretation: string;
+    deepInquiryQuestions?: string[];
+  } => ({
+    interpretation: interpretation + (reflection ? `${SELF_OBSERVATION_SECTION}${reflection}` : ""),
+    deepInquiryQuestions:
+      deepInquiryQuestions && deepInquiryQuestions.length === 3 ? [...deepInquiryQuestions] : undefined,
+  });
+
+  const effectiveArchiveId = shareReportId ?? savedItemId;
+
+  /** 与系统分享 / 剪贴板一致：叙事文案 + 完整分享 URL（无额外换行） */
+  const composeShareClipText = (shareUrl: string) =>
+    `我在镜微易经获得了一份观心报告：${benGua?.name ?? ""}卦。针对我的困惑：“${question ?? ""}”，这里照见的是叙事与感受，而非断言。${shareUrl}`;
+
+  const resolveArchiveIdForShare = async (): Promise<string | null> => {
+    if (effectiveArchiveId) return effectiveArchiveId;
+    if (!onSave) return null;
+    const item = await onSave(buildSavePayload());
+    if (item && typeof item === "object" && "id" in item && typeof (item as HistoryItem).id === "string") {
+      setSaveDone(true);
+      setSavedItemId((item as HistoryItem).id);
+      if ((item as HistoryItem).share_active) {
+        setHasActiveShare(true);
+      }
+      return (item as HistoryItem).id;
+    }
+    return null;
+  };
+
+  const handleShare = async () => {
+    if (!archivesShareEnabled) {
+      toast.message("请先登录并确保观心档案服务可用后再分享");
+      return;
+    }
+    setShareBusy(true);
+    try {
+      const archiveId = await resolveArchiveIdForShare();
+      if (!archiveId) {
+        toast.error("无法生成分享链接，请稍后重试");
+        return;
+      }
+      const { path } = await postArchiveShare(archiveId);
+      setHasActiveShare(true);
+      const origin = process.env.APP_URL || window.location.origin;
+      const shareUrl = `${origin.replace(/\/$/, "")}${path}`;
+      const clip = composeShareClipText(shareUrl);
+      if (navigator.share) {
+        await navigator.share({
           title: "镜微易经 · 观心报告",
-          text: shareText,
-          url: shareUrl,
-        })
-        .catch(console.error);
-    } else {
-      void navigator.clipboard.writeText(`${shareText}\n查看更多：${shareUrl}`);
-      alert("链接已复制到剪贴板");
+          text: clip,
+        });
+      } else {
+        await navigator.clipboard.writeText(clip);
+        toast.success("链接已复制到剪贴板");
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "分享失败";
+      toast.error(msg);
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const handleStopShare = async () => {
+    const archiveId = effectiveArchiveId;
+    if (!archiveId || !archivesShareEnabled) {
+      toast.message("当前没有可停止的分享上下文");
+      return;
+    }
+    setStopShareBusy(true);
+    try {
+      const { revoked } = await deleteArchiveShare(archiveId);
+      if (revoked === 0) {
+        toast.message("当前没有进行中的分享");
+      } else {
+        setHasActiveShare(false);
+        toast.success("已停止分享");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "停止分享失败");
+    } finally {
+      setStopShareBusy(false);
+    }
+  };
+
+  const canStopShare = hasActiveShare && archivesShareEnabled && Boolean(effectiveArchiveId);
+
+  const handleShareButtonClick = () => {
+    if (canStopShare) {
+      void handleStopShare();
+      return;
+    }
+    void handleShare();
+  };
+
+  const shareButtonBusy = shareBusy || stopShareBusy;
+
+  const handleCopyShareLink = async () => {
+    if (!effectiveArchiveId || !archivesShareEnabled) {
+      toast.message("无法复制：请先登录并确保观心档案可用");
+      return;
+    }
+    setCopyShareLinkBusy(true);
+    try {
+      const { path } = await postArchiveShare(effectiveArchiveId);
+      const origin = process.env.APP_URL || window.location.origin;
+      const shareUrl = `${origin.replace(/\/$/, "")}${path}`;
+      await navigator.clipboard.writeText(composeShareClipText(shareUrl));
+      toast.success("分享链接已复制");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "复制失败");
+    } finally {
+      setCopyShareLinkBusy(false);
     }
   };
 
@@ -583,14 +656,14 @@ export const Interpretation: React.FC<InterpretationProps> = ({
                     if (!onSave) return;
                     setSaveLoading(true);
                     try {
-                      await onSave({
-                        interpretation:
-                          interpretation + (reflection ? `${SELF_OBSERVATION_SECTION}${reflection}` : ""),
-                        deepInquiryQuestions:
-                          deepInquiryQuestions && deepInquiryQuestions.length === 3
-                            ? [...deepInquiryQuestions]
-                            : undefined,
-                      });
+                      const payload = buildSavePayload();
+                      const item = await onSave(payload);
+                      if (item && typeof item === "object" && "id" in item && typeof (item as HistoryItem).id === "string") {
+                        setSavedItemId((item as HistoryItem).id);
+                        if ((item as HistoryItem).share_active) {
+                          setHasActiveShare(true);
+                        }
+                      }
                       setSaveDone(true);
                     } catch (e) {
                       const msg = e instanceof Error ? e.message : "保存失败";
@@ -628,18 +701,64 @@ export const Interpretation: React.FC<InterpretationProps> = ({
               <blockquote className="border-none font-serif text-base italic leading-relaxed text-ink/55 md:text-lg">
                 {SELF_OBSERVATION_QUOTE}
               </blockquote>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleShare}
+              <div
                 className={cn(
-                  "h-auto min-h-12 self-start rounded-full border-ink/12 px-8 py-4 font-serif text-sm tracking-widest text-ink/60",
-                  "hover:bg-white hover:text-ink"
+                  "flex flex-col self-start gap-3",
+                  canStopShare && "sm:flex-row sm:flex-wrap sm:items-stretch",
                 )}
               >
-                <Share2 size={17} className="shrink-0" aria-hidden />
-                <span className="ml-2">分享这段见解</span>
-              </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={shareButtonBusy || copyShareLinkBusy}
+                  onClick={handleShareButtonClick}
+                  className={cn(
+                    "inline-flex h-auto min-h-12 items-center gap-2 rounded-full border-ink/12 px-8 py-4 font-serif text-sm tracking-widest text-ink/60",
+                    "hover:bg-white hover:text-ink",
+                  )}
+                >
+                  {shareButtonBusy ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="animate-spin" size={17} aria-hidden />
+                      {canStopShare ? "处理中…" : "正在生成链接…"}
+                    </span>
+                  ) : canStopShare ? (
+                    <>
+                      <Ban size={17} className="shrink-0" aria-hidden />
+                      <span>停止分享本条</span>
+                    </>
+                  ) : (
+                    <>
+                      <Share2 size={17} className="shrink-0" aria-hidden />
+                      <span>分享这段见解</span>
+                    </>
+                  )}
+                </Button>
+                {canStopShare ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={copyShareLinkBusy || shareButtonBusy}
+                    onClick={() => void handleCopyShareLink()}
+                    className={cn(
+                      "inline-flex h-auto min-h-12 items-center gap-2 rounded-full border-ink/12 px-8 py-4 font-serif text-sm tracking-widest text-ink/60",
+                      "hover:bg-white hover:text-ink",
+                    )}
+                  >
+                    {copyShareLinkBusy ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="animate-spin" size={17} aria-hidden />
+                        复制中…
+                      </span>
+                    ) : (
+                      <>
+                        <ClipboardCopy size={17} className="shrink-0" aria-hidden />
+                        <span>复制分享链接</span>
+                      </>
+                    )}
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </section>
         )}

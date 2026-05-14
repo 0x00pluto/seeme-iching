@@ -32,6 +32,11 @@ import {
   handleArchivesGet,
   handleArchivesPost,
 } from "./server/archives-handlers.js";
+import {
+  handleArchiveShareDelete,
+  handleArchiveSharePost,
+  handleShareGet,
+} from "./server/share-handlers.js";
 import { requireAuth, UNAUTHORIZED_RESPONSE } from "./server/require-auth.js";
 import { appendSessionCookie, appendClearSessionCookie } from "./server/user-session-cookie.js";
 import { buildAuthCallbackUrl, resolvePublicOrigin } from "./server/public-origin.js";
@@ -102,6 +107,32 @@ async function startServer() {
       return;
     }
     const result = await handleArchivesDeleteOne(req.headers.cookie, req.params.id ?? "");
+    res.status(result.status).json(result.json);
+  });
+
+  app.post("/api/archives/:id/share", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const result = await handleArchiveSharePost(req.headers.cookie, req.params.id ?? "");
+    res.status(result.status).json(result.json);
+  });
+
+  app.delete("/api/archives/:id/share", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const result = await handleArchiveShareDelete(req.headers.cookie, req.params.id ?? "");
+    res.status(result.status).json(result.json);
+  });
+
+  app.get("/api/share/:token", async (req, res) => {
+    const result = await handleShareGet(req.params.token ?? "");
+    if (result.cacheControl) {
+      res.setHeader("Cache-Control", result.cacheControl);
+    }
     res.status(result.status).json(result.json);
   });
 

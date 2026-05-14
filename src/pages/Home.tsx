@@ -69,6 +69,10 @@ export const Home: React.FC = () => {
   const [interpretClientSessionId, setInterpretClientSessionId] = useState<string | null>(null);
   /** 从档案点入时用于 DeepDialogue 锚定与 fromArchive */
   const [selectedArchiveItemId, setSelectedArchiveItemId] = useState<string | null>(null);
+  /** 打开该条档案时列表接口是否报告仍有有效分享 */
+  const [selectedArchiveShareActive, setSelectedArchiveShareActive] = useState(false);
+  /** 当场「保存这次照见」成功后写入，供分享 API 使用（与档案 id 互斥由下方表达式合并） */
+  const [savedReportId, setSavedReportId] = useState<string | null>(null);
   const canStartDivination = question.trim().length > 0;
 
   const archivesRemote = Boolean(authUser && archivesBackendConfigured);
@@ -175,7 +179,7 @@ export const Home: React.FC = () => {
   }, [state]);
 
   const persistArchive = useCallback(
-    async (payload: { interpretation: string; deepInquiryQuestions?: string[] }) => {
+    async (payload: { interpretation: string; deepInquiryQuestions?: string[] }): Promise<HistoryItem> => {
       if (!authUser) {
         toast.message("请先登录后再保存观心档案");
         throw new Error("未登录");
@@ -201,7 +205,9 @@ export const Home: React.FC = () => {
         if (prev.some((h) => h.id === item.id)) return prev;
         return [item, ...prev];
       });
+      setSavedReportId(item.id);
       toast.success("观心档案已保存");
+      return item;
     },
     [authUser, archivesBackendConfigured, interpretClientSessionId, question, lines],
   );
@@ -227,6 +233,7 @@ export const Home: React.FC = () => {
   const handleComplete = (newLines: LineType[]) => {
     setArchivePayload(null);
     setSelectedArchiveItemId(null);
+    setSavedReportId(null);
     setInterpretClientSessionId(crypto.randomUUID());
     setLines(newLines);
     setTimeout(() => {
@@ -248,6 +255,8 @@ export const Home: React.FC = () => {
     setLines(item.lines);
     setQuestion(item.question);
     setInterpretClientSessionId(null);
+    setSavedReportId(null);
+    setSelectedArchiveShareActive(Boolean(item.share_active));
     setSelectedArchiveItemId(item.id);
     setArchivePayload({
       markdown: item.interpretation,
@@ -262,6 +271,7 @@ export const Home: React.FC = () => {
       setArchivePayload(null);
       setSelectedArchiveItemId(null);
       setInterpretClientSessionId(null);
+      setSavedReportId(null);
       setState("divination");
     }
     if (state === "history") setState("landing");
@@ -276,6 +286,7 @@ export const Home: React.FC = () => {
     setQuotaEntitlementsError(null);
     setInterpretClientSessionId(null);
     setSelectedArchiveItemId(null);
+    setSavedReportId(null);
     setHistory([]);
     toast.success("已退出登录");
   };
@@ -665,6 +676,9 @@ export const Home: React.FC = () => {
                 cachedMarkdown={archivePayload?.markdown}
                 cachedDeepInquiryQuestions={archivePayload?.deepInquiryQuestions}
                 canUseDeepFollowUp={canUseDeepFollowUp}
+                archivesShareEnabled={Boolean(authUser && archivesBackendConfigured)}
+                shareReportId={selectedArchiveItemId ?? savedReportId}
+                initialShareActive={selectedArchiveItemId ? selectedArchiveShareActive : undefined}
                 onSave={persistArchive}
               />
             </motion.section>

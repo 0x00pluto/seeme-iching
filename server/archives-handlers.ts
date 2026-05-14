@@ -12,6 +12,8 @@ export type ArchiveHistoryItemJson = {
   lines: unknown;
   interpretation: string;
   deepInquiryQuestions?: string[];
+  /** 是否存在未撤销的公开分享链接 */
+  share_active?: boolean;
 };
 
 type DbRow = {
@@ -84,7 +86,25 @@ export async function handleArchivesGet(cookieHeader: string | undefined): Promi
     return { status: 500, json: { error: "读取档案失败", detail: error.message } };
   }
   const rows = (data ?? []) as DbRow[];
-  return { status: 200, json: { items: rows.map(rowToItem) } };
+  const ids = rows.map((r) => r.id);
+  const activeByReport = new Set<string>();
+  if (ids.length > 0) {
+    const { data: linkRows, error: linkErr } = await sb
+      .from("interpret_share_link")
+      .select("report_id")
+      .in("report_id", ids)
+      .is("revoked_at", null);
+    if (!linkErr && linkRows) {
+      for (const row of linkRows as { report_id: string }[]) {
+        if (typeof row.report_id === "string") activeByReport.add(row.report_id);
+      }
+    }
+  }
+  const items = rows.map((row) => {
+    const item = rowToItem(row);
+    return { ...item, share_active: activeByReport.has(row.id) };
+  });
+  return { status: 200, json: { items } };
 }
 
 export async function handleArchivesPost(
@@ -144,7 +164,14 @@ export async function handleArchivesPost(
           json: { code: "ARCHIVE_ALREADY_SAVED", error: "该次照见已保存过" },
         };
       }
-      const item = rowToItem(existing as DbRow);
+      const base = rowToItem(existing as DbRow);
+      const { data: activeLink } = await sb
+        .from("interpret_share_link")
+        .select("id")
+        .eq("report_id", base.id)
+        .is("revoked_at", null)
+        .maybeSingle();
+      const item: ArchiveHistoryItemJson = { ...base, share_active: Boolean(activeLink) };
       return {
         status: 409,
         json: { code: "ARCHIVE_ALREADY_SAVED", error: "该次照见已保存过", id: item.id, item },
@@ -153,7 +180,7 @@ export async function handleArchivesPost(
     return { status: 500, json: { error: "保存失败", detail: error.message } };
   }
 
-  const item = rowToItem(data as DbRow);
+  const item: ArchiveHistoryItemJson = { ...rowToItem(data as DbRow), share_active: false };
   return { status: 201, json: { item } };
 }
 

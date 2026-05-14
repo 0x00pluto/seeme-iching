@@ -136,6 +136,31 @@ join public.user_membership m on m.user_id = u.id;
 
 ---
 
+## `interpret_share_link`
+
+将 **`interpret_saved_report`** 中一条已保存报告映射为 **不可猜测的 `token`**，供访客通过 `GET /api/share/:token` 读取**脱敏快照**（不含 `user_id` / `client_session_id`）；**不能**替代登录后的观心档案列表权限。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | `uuid` | 主键；默认 `gen_random_uuid()` |
+| `report_id` | `uuid` | 外键 → `interpret_saved_report(id)`，`ON DELETE CASCADE` |
+| `token` | `text` | 公开路径段；长度 **16–128**；全局唯一 |
+| `created_at` | `timestamptz` | 创建时间，默认 `now()` |
+| `revoked_at` | `timestamptz` | 可空；非空表示已撤销，公开接口不再返回正文 |
+
+**唯一约束**：
+
+- 全表 **`token`** 唯一。
+- **部分唯一**：`(report_id)` **且** `revoked_at IS NULL` —— 每条报告至多一条**未撤销**分享；撤销后可再插入新行以生成新链接。
+
+**HTTP**：
+
+- `POST /api/archives/:id/share`（需登录）：创建或返回该档案当前有效 `token`。
+- `DELETE /api/archives/:id/share`（需登录）：将该档案下未撤销行全部 **`revoked_at = now()`**。
+- `GET /api/share/:token`（**无需登录**）：返回 `question`、`lines`、`interpretation` 供只读页渲染。
+
+---
+
 ## 数据库函数（RPC）
 
 仅授予 **`service_role`** 执行（见 migration 中 `GRANT EXECUTE`）。前端不直连；由 [`server/membership-quota.ts`](../server/membership-quota.ts) 调用。

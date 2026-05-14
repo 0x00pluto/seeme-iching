@@ -15,6 +15,8 @@ export interface HistoryItem {
   interpretation: string;
   /** 保存时的三条深入追问；旧档案可无此字段，打开时用本地兜底文案 */
   deepInquiryQuestions?: string[];
+  /** 是否存在未撤销的公开分享（由 GET /api/archives 填充） */
+  share_active?: boolean;
 }
 
 /** 摘取观心报告首行可读预览，供列表底栏展示（非完整 Markdown 渲染） */
