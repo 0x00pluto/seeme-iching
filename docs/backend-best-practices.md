@@ -68,6 +68,14 @@ Express 端的接入：[`server.ts`](../server.ts)（含 `/api/interpret/deep-in
 
 **Don't**: 删掉 `server.ts` 只留 `api/*`。这等于砍掉了演进空间，需要再写就要从头来。
 
+### 2.3 邮箱镜证登录（Auth OTP）
+
+- 发码 / 验码逻辑在 [`server/auth-handlers.ts`](../server/auth-handlers.ts)；`signInWithOtp` **不传** `emailRedirectTo`；验码用 `verifyOtp` + 本站 HttpOnly Cookie（`USER_SESSION_SECRET`）。
+- 同邮箱 **60s** 重发冷却由 [`server/auth-otp-cooldown.ts`](../server/auth-otp-cooldown.ts) 进程内 `Map` 实现；响应体带 `resendAvailableAt`（ISO8601），前端倒计时须以此为准。
+- **多实例限制**：Vercel 水平扩展时各实例 Map 不共享，60s 为尽力而为；与 Supabase 侧限流取较严。强一致需外置 KV，见 [§10](#10-限流与配额前瞻实践)。
+- `POST /api/auth/session` 已废弃（**410**）；新登录走 `POST /api/auth/verify-otp`。
+- 运维：Supabase 邮件模板须含 `{{ .Token }}`；Email OTP Expiration 建议 **1800** 秒。
+
 ---
 
 ## 3. Vercel 文件路由约定
@@ -88,6 +96,8 @@ Vercel 把 `api/*` 下的 ts 文件按**路径**映射成 HTTP 端点：
 - [`api/interpret/deep-inquiry.ts`](../api/interpret/deep-inquiry.ts) → `POST /api/interpret/deep-inquiry`
 - [`api/chat/stream.ts`](../api/chat/stream.ts) → `POST /api/chat/stream`
 - [`api/health/supabase.ts`](../api/health/supabase.ts) → `GET /api/health/supabase`（Supabase 连通性；需 `SUPABASE_*` 环境变量）
+- [`api/auth/send-otp.ts`](../api/auth/send-otp.ts) → `POST /api/auth/send-otp`
+- [`api/auth/verify-otp.ts`](../api/auth/verify-otp.ts) → `POST /api/auth/verify-otp`
 
 **Do**: 需要加 `/api/foo/bar` 时，**一定**新建 `api/foo/bar.ts`。
 

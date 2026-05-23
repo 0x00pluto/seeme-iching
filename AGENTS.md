@@ -8,7 +8,7 @@
 
 ## 产品一句话
 
-**镜微 · 易经 AI 内省**（`seeme-iching`）：基于六十四卦意象的 AI 心理内省；原则：**不预言命运，只映照叙事**。登录用户观心档案存 Supabase（`/api/archives`）；深度对话草稿仍用浏览器 `localStorage`。
+**镜微 · 易经 AI 内省**（`seeme-iching`）：基于六十四卦意象的 AI 心理内省；原则：**不预言命运，只映照叙事**。登录为邮箱六位镜证（`POST /api/auth/send-otp`、`verify-otp`）；观心档案存 Supabase（`/api/archives`）；深度对话草稿仍用浏览器 `localStorage`。
 
 ## 技术画像（极简）
 

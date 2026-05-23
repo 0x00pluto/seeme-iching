@@ -1,9 +1,8 @@
 /**
- * Vercel Serverless：POST /api/auth/send-otp（发送邮箱魔法链接）
+ * Vercel Serverless：POST /api/auth/send-otp（发送邮箱六位镜证）
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { handleSendMagicLink } from "../../server/auth-handlers.js";
-import { buildAuthCallbackUrl, resolvePublicOrigin } from "../../server/public-origin.js";
+import { handleSendLoginOtp } from "../../server/auth-handlers.js";
 
 export const config = {
   runtime: "nodejs",
@@ -16,9 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       res.status(405).json({ error: "Method Not Allowed" });
       return;
     }
-    const origin = resolvePublicOrigin(req);
-    const redirectTo = buildAuthCallbackUrl(origin);
-    const result = await handleSendMagicLink(req.body, redirectTo);
+    const result = await handleSendLoginOtp(req.body);
     res.status(result.status).json(result.json);
   } catch (e) {
     console.error("api/auth/send-otp:", e);

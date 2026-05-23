@@ -707,7 +707,11 @@ export const Home: React.FC = () => {
         </AnimatePresence>
       </main>
 
-      <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
+      <LoginDialog
+        open={loginOpen}
+        onOpenChange={setLoginOpen}
+        onLoginSuccess={() => void refreshAuth()}
+      />
 
       <Dialog
         open={state === "history" && historySearchOpen}

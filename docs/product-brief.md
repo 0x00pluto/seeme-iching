@@ -29,7 +29,7 @@
 | 解读日额度扣减 | 已上线 | RPC `consume_interpret_quota`；超额 **429** `INTERPRET_DAILY_QUOTA` |
 | 三条深入问句（deep-inquiry） | 已上线 | `POST /api/interpret/deep-inquiry`；会员档门槛见 Home |
 | 8 轮深度对话（Deep Dialogue） | 已上线 | [`DeepDialogue.tsx`](../src/components/IChing/DeepDialogue.tsx)；会话草稿 **localStorage** `iching_deep_dialogue_*` |
-| 邮箱 Magic Link 登录 | 已上线 | [`LoginDialog.tsx`](../src/components/auth/LoginDialog.tsx)、`/api/auth/*` |
+| 邮箱六位镜证登录 | 已上线 | [`LoginDialog.tsx`](../src/components/auth/LoginDialog.tsx)、`POST /api/auth/send-otp`、`POST /api/auth/verify-otp` |
 | 观心档案（云端） | 已上线（需 Supabase + 登录） | `interpret_saved_report`；`GET/POST/DELETE /api/archives*` |
 | 分享链接创建/撤销 | 已上线 | `POST/DELETE /api/archives/:id/share`；公开 `GET /api/share/:token` |
 | 分享只读页 | 已上线 | [`SharedReportView.tsx`](../src/pages/SharedReportView.tsx)、路由 `/s/:token` |
@@ -54,7 +54,7 @@ landing → divination → interpretation → history
 
 独立路由（[`App.tsx`](../src/App.tsx)）：
 
-- `/auth/callback` — Magic Link 回调
+- `/auth/callback` — 旧魔法链接书签提示（新登录走弹窗镜证）
 - `/s/:token` — 公开分享页
 
 ## 5. 数据与 API 速查
@@ -67,8 +67,9 @@ landing → divination → interpretation → history
 
 | 方法 | 路径 | 用途 |
 |------|------|------|
-| POST | `/api/auth/send-otp` | 发送邮箱 OTP |
-| POST | `/api/auth/session` | 建立会话 Cookie |
+| POST | `/api/auth/send-otp` | 寄送邮箱六位镜证（60s 重发冷却） |
+| POST | `/api/auth/verify-otp` | 验码并建立会话 Cookie |
+| POST | `/api/auth/session` | **已废弃（410）**；原 Magic Link 换 Cookie |
 | GET | `/api/auth/me` | 用户 + `entitlements` |
 | POST | `/api/interpret/stream` | 观心报告 SSE |
 | POST | `/api/interpret/deep-inquiry` | 三条深入问句 |

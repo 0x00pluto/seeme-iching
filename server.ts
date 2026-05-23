@@ -16,7 +16,8 @@ import { pipeArkStreamToSse } from "./server/pipe-ark-sse.js";
 import { flushHeadersAndInitialSsePing } from "./server/sse-warmup.js";
 import { probeSupabaseConnectivity } from "./server/supabase-client.js";
 import {
-  handleSendMagicLink,
+  handleSendLoginOtp,
+  handleVerifyLoginOtp,
   handleExchangeSession,
   handleLogout,
   handleMe,
@@ -39,7 +40,6 @@ import {
 } from "./server/share-handlers.js";
 import { requireAuth, UNAUTHORIZED_RESPONSE } from "./server/require-auth.js";
 import { appendSessionCookie, appendClearSessionCookie } from "./server/user-session-cookie.js";
-import { buildAuthCallbackUrl, resolvePublicOrigin } from "./server/public-origin.js";
 
 dotenv.config();
 
@@ -50,9 +50,14 @@ async function startServer() {
   app.use(express.json());
 
   app.post("/api/auth/send-otp", async (req, res) => {
-    const origin = resolvePublicOrigin(req);
-    const redirectTo = buildAuthCallbackUrl(origin);
-    const result = await handleSendMagicLink(req.body, redirectTo);
+    const result = await handleSendLoginOtp(req.body);
+    res.status(result.status).json(result.json);
+  });
+
+  app.post("/api/auth/verify-otp", async (req, res) => {
+    const result = await handleVerifyLoginOtp(req.body, (token, maxAge) => {
+      appendSessionCookie(res, token, maxAge);
+    });
     res.status(result.status).json(result.json);
   });
 
