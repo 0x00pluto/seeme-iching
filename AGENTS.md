@@ -4,11 +4,11 @@
 
 ## 阅读顺序（Agent）
 
-开始执行任务前，**先读** [`docs/doc_index.md`](docs/doc_index.md)，按其中的文档地图与任务类型**渐进展开**，再改代码。仓库级编辑器与协作约定以 **`.cursor/rules`**、`package.json` 为准。
+开始执行任务前，**先读** [`docs/doc_index.md`](docs/doc_index.md)，按其中的文档地图与任务类型**渐进展开**，再改代码。撰写或验收 PRD 时另读 [`docs/product-brief.md`](docs/product-brief.md)。仓库级编辑器与协作约定以 **`.cursor/rules`**、`package.json` 为准。
 
 ## 产品一句话
 
-**镜微 · 易经 AI 内省**（`seeme-iching`）：基于六十四卦意象的 AI 心理内省；原则：**不预言命运，只映照叙事**。观心档案保存在浏览器本地（`localStorage`）。
+**镜微 · 易经 AI 内省**（`seeme-iching`）：基于六十四卦意象的 AI 心理内省；原则：**不预言命运，只映照叙事**。登录用户观心档案存 Supabase（`/api/archives`）；深度对话草稿仍用浏览器 `localStorage`。
 
 ## 技术画像（极简）
 
@@ -23,6 +23,17 @@
 - `pnpm run db:migration:new -- <name>` — 在 `supabase/migrations/` 生成空 SQL；文件名前缀 `YYYYMMDDHHMMSS` 由 [`scripts/db-migration-new.mjs`](scripts/db-migration-new.mjs) 按**本机时区墙钟**（`Date` 本地分量）生成。若希望时间戳按 UTC 墙钟，可在命令前加 `TZ=UTC`（可选）。`db:migrate` / `list` 前需已 `supabase link`。
 - `pnpm run db:migration:list` — 查看迁移状态
 - `pnpm run db:migrate` — `supabase db push` 推送到已 link 的远端库
+
+## 团队命令（Cursor）
+
+安装于 [`.cursor/commands/team/`](.cursor/commands/team/)（母版维护于 Obsidian `Vibecoding团队/团队成员/`）：
+
+| 命令 | 用途 |
+|------|------|
+| `/team:product-manager` | 撰写 PRD → 落盘 [`prds/`](prds/) |
+| `/team:prd-accept` | 对照代码验收并回写 PRD「工程验收状态」 |
+
+重装或变量说明见 [`docs/team-commands-install.md`](docs/team-commands-install.md)。
 
 ## 代码入口指路
 
