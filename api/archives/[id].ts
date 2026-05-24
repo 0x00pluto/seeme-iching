@@ -1,8 +1,11 @@
 /**
- * Vercel Serverless：DELETE /api/archives/:id
+ * Vercel Serverless：PATCH /api/archives/:id、DELETE /api/archives/:id
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { handleArchivesDeleteOne } from "../../server/archives-handlers.js";
+import {
+  handleArchivesDeleteOne,
+  handleArchivesPatch,
+} from "../../server/archives-handlers.js";
 import { requireAuth, UNAUTHORIZED_RESPONSE } from "../../server/require-auth.js";
 
 export const config = {
@@ -12,10 +15,6 @@ export const config = {
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
-    if (req.method !== "DELETE") {
-      res.status(405).json({ error: "Method Not Allowed" });
-      return;
-    }
     const cookieHeader =
       typeof req.headers.cookie === "string" ? req.headers.cookie : undefined;
 
@@ -26,8 +25,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     const rawId = req.query.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
-    const result = await handleArchivesDeleteOne(cookieHeader, id ?? "");
-    res.status(result.status).json(result.json);
+
+    if (req.method === "PATCH") {
+      const result = await handleArchivesPatch(cookieHeader, id ?? "", req.body);
+      res.status(result.status).json(result.json);
+      return;
+    }
+    if (req.method === "DELETE") {
+      const result = await handleArchivesDeleteOne(cookieHeader, id ?? "");
+      res.status(result.status).json(result.json);
+      return;
+    }
+    res.status(405).json({ error: "Method Not Allowed" });
   } catch (e) {
     console.error("api/archives/[id]:", e);
     const message = e instanceof Error ? e.message : String(e);

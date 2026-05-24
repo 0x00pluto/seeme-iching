@@ -31,6 +31,7 @@ import {
   handleArchivesDeleteAll,
   handleArchivesDeleteOne,
   handleArchivesGet,
+  handleArchivesPatch,
   handleArchivesPost,
 } from "./server/archives-handlers.js";
 import {
@@ -103,6 +104,15 @@ async function startServer() {
       return;
     }
     const result = await handleArchivesDeleteAll(req.headers.cookie);
+    res.status(result.status).json(result.json);
+  });
+
+  app.patch("/api/archives/:id", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const result = await handleArchivesPatch(req.headers.cookie, req.params.id ?? "", req.body);
     res.status(result.status).json(result.json);
   });
 

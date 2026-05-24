@@ -22,6 +22,8 @@ export type EntitlementsMembership = {
 export type Entitlements = {
   interpret: EntitlementsInterpret;
   membership: EntitlementsMembership;
+  /** 当前账号档位对应的观心档案保留上限天数（7 或 180） */
+  archiveRetentionDays: number;
 };
 
 export type AuthMeResponse = {

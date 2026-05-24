@@ -14,7 +14,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { AnimatePresence, motion } from "framer-motion";
 import { Ban, BookOpen, ClipboardCopy, Compass, Eye, Ghost, Heart, Loader2, Share2 } from "lucide-react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { markdownReportRehypePlugins } from "@/lib/markdown-report-rehype";
@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { DeepDialogue } from "./DeepDialogue";
 import { Hexagram } from "./Hexagram";
 import type { HistoryItem } from "./History";
+import { patchArchive } from "@/lib/archives-api";
 import { deleteArchiveShare, postArchiveShare } from "@/lib/share-api";
 
 interface InterpretationProps {
@@ -44,10 +45,18 @@ interface InterpretationProps {
   shareReportId?: string | null;
   /** 从档案打开时：列表接口给出的当前是否仍有有效分享 */
   initialShareActive?: boolean;
+  /** 账号当前档位对应的观心档案保留上限天数（非单笔剩余） */
+  archiveRetentionDays?: number;
+  /** 本条报告失效时刻（毫秒）；autosave 或从档案进入时传入 */
+  initialArchiveExpiresAt?: number;
   onSave?: (payload: {
     interpretation: string;
     deepInquiryQuestions?: string[];
   }) => void | Promise<void | HistoryItem>;
+}
+
+function daysUntilExpiry(expiresAtMs: number): number {
+  return Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 86_400_000));
 }
 
 const SELF_OBSERVATION_QUOTE =
@@ -119,6 +128,8 @@ export const Interpretation: React.FC<InterpretationProps> = ({
   archivesShareEnabled = false,
   shareReportId = null,
   initialShareActive,
+  archiveRetentionDays = 7,
+  initialArchiveExpiresAt,
   onSave,
 }) => {
   const [interpretation, setInterpretation] = useState<string>("");
@@ -129,8 +140,8 @@ export const Interpretation: React.FC<InterpretationProps> = ({
   const [selectedDirection, setSelectedDirection] = useState<string | null>(null);
   const [deepInquiryQuestions, setDeepInquiryQuestions] = useState<string[] | null>(null);
   const [deepInquiryLoading, setDeepInquiryLoading] = useState(false);
-  const [saveLoading, setSaveLoading] = useState(false);
-  const [saveDone, setSaveDone] = useState(false);
+  const [archiveExpiresAt, setArchiveExpiresAt] = useState<number | undefined>(initialArchiveExpiresAt);
+  const [autosaveFailed, setAutosaveFailed] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
   const [stopShareBusy, setStopShareBusy] = useState(false);
   const [copyShareLinkBusy, setCopyShareLinkBusy] = useState(false);
@@ -141,15 +152,19 @@ export const Interpretation: React.FC<InterpretationProps> = ({
   const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const deepInquiryAbortRef = useRef<AbortController | null>(null);
+  const autosaveDoneRef = useRef(false);
+  const autosavePromiseRef = useRef<Promise<string | null> | null>(null);
   const [hintOffset, setHintOffset] = useState(0);
   const [hintStep, setHintStep] = useState(0);
 
   useEffect(() => {
-    setSaveDone(false);
-    setSaveLoading(false);
+    autosaveDoneRef.current = false;
+    autosavePromiseRef.current = null;
+    setAutosaveFailed(false);
     setSavedItemId(null);
+    setArchiveExpiresAt(initialArchiveExpiresAt);
     setHasActiveShare(Boolean(initialShareActive));
-  }, [dialogueAnchorId, cachedMarkdown, initialShareActive]);
+  }, [dialogueAnchorId, cachedMarkdown, initialShareActive, initialArchiveExpiresAt]);
 
   const benLines = lines;
   const huLines = getHuGuaLines(lines);
@@ -339,24 +354,109 @@ export const Interpretation: React.FC<InterpretationProps> = ({
 
   const effectiveArchiveId = shareReportId ?? savedItemId;
 
-  /** 与系统分享 / 剪贴板一致：叙事文案 + 完整分享 URL（无额外换行） */
-  const composeShareClipText = (shareUrl: string) =>
-    `我在镜微易经获得了一份观心报告：${benGua?.name ?? ""}卦。针对我的困惑：“${question ?? ""}”，这里照见的是叙事与感受，而非断言。${shareUrl}`;
+  const applySavedItem = (item: HistoryItem) => {
+    setSavedItemId(item.id);
+    if (typeof item.expiresAt === "number") {
+      setArchiveExpiresAt(item.expiresAt);
+    }
+    if (item.share_active) {
+      setHasActiveShare(true);
+    }
+  };
 
-  const resolveArchiveIdForShare = async (): Promise<string | null> => {
+  const waitForArchiveId = async (): Promise<string | null> => {
     if (effectiveArchiveId) return effectiveArchiveId;
-    if (!onSave) return null;
-    const item = await onSave(buildSavePayload());
-    if (item && typeof item === "object" && "id" in item && typeof (item as HistoryItem).id === "string") {
-      setSaveDone(true);
-      setSavedItemId((item as HistoryItem).id);
-      if ((item as HistoryItem).share_active) {
-        setHasActiveShare(true);
-      }
-      return (item as HistoryItem).id;
+    if (autosavePromiseRef.current) {
+      return autosavePromiseRef.current;
     }
     return null;
   };
+
+  const runAutosave = useCallback(async (): Promise<string | null> => {
+    if (!onSave || fromArchive) return null;
+    const text = interpretation.trim();
+    if (!text || text.startsWith("未能生成解读")) return null;
+
+    const promise = (async () => {
+      const result = await onSave({ interpretation: text });
+      if (result && typeof result === "object" && "id" in result && typeof result.id === "string") {
+        applySavedItem(result as HistoryItem);
+        setAutosaveFailed(false);
+        return result.id;
+      }
+      return null;
+    })();
+
+    autosavePromiseRef.current = promise;
+    return promise;
+  }, [fromArchive, interpretation, onSave]);
+
+  useEffect(() => {
+    if (!reportReadyForFollowUp || fromArchive || !onSave) return;
+    if (autosaveDoneRef.current) return;
+
+    let cancelled = false;
+    const scheduleId = window.setTimeout(() => {
+      if (cancelled || autosaveDoneRef.current) return;
+      autosaveDoneRef.current = true;
+      void runAutosave().catch(() => {
+        autosaveDoneRef.current = false;
+        setAutosaveFailed(true);
+        toast.error("档案未能自动保存，请检查网络");
+      });
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(scheduleId);
+    };
+  }, [reportReadyForFollowUp, fromArchive, onSave, dialogueAnchorId, runAutosave]);
+
+  useEffect(() => {
+    if (fromArchive || cachedMarkdown?.trim()) return;
+    if (!deepInquiryQuestions || deepInquiryQuestions.length !== 3) return;
+
+    void (async () => {
+      const archiveId = await waitForArchiveId();
+      if (!archiveId) return;
+      try {
+        await patchArchive(archiveId, { deep_inquiry_questions: [...deepInquiryQuestions] });
+      } catch (patchErr) {
+        console.error("patch deep inquiry failed:", patchErr);
+      }
+    })();
+  }, [fromArchive, cachedMarkdown, deepInquiryQuestions]);
+
+  const patchReflectionToArchive = useCallback(async () => {
+    const archiveId = await waitForArchiveId();
+    if (!archiveId || fromArchive) return;
+    const merged =
+      interpretation + (reflection ? `${SELF_OBSERVATION_SECTION}${reflection}` : "");
+    try {
+      await patchArchive(archiveId, { interpretation: merged });
+    } catch (e) {
+      console.error("patch reflection failed:", e);
+    }
+  }, [fromArchive, interpretation, reflection]);
+
+  useEffect(() => {
+    if (fromArchive) return;
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        void patchReflectionToArchive();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [fromArchive, patchReflectionToArchive]);
+
+  const expiryDaysLeft =
+    typeof archiveExpiresAt === "number" ? daysUntilExpiry(archiveExpiresAt) : null;
+  const showExpirySoonHint = expiryDaysLeft !== null && expiryDaysLeft <= 1;
+
+  /** 与系统分享 / 剪贴板一致：叙事文案 + 完整分享 URL（无额外换行） */
+  const composeShareClipText = (shareUrl: string) =>
+    `我在镜微易经获得了一份观心报告：${benGua?.name ?? ""}卦。针对我的困惑：“${question ?? ""}”，这里照见的是叙事与感受，而非断言。${shareUrl}`;
 
   const handleShare = async () => {
     if (!archivesShareEnabled) {
@@ -365,9 +465,9 @@ export const Interpretation: React.FC<InterpretationProps> = ({
     }
     setShareBusy(true);
     try {
-      const archiveId = await resolveArchiveIdForShare();
+      const archiveId = await waitForArchiveId();
       if (!archiveId) {
-        toast.error("无法生成分享链接，请稍后重试");
+        toast.message("报告尚未就绪，请稍候");
         return;
       }
       const { path } = await postArchiveShare(archiveId);
@@ -427,13 +527,18 @@ export const Interpretation: React.FC<InterpretationProps> = ({
   const shareButtonBusy = shareBusy || stopShareBusy;
 
   const handleCopyShareLink = async () => {
-    if (!effectiveArchiveId || !archivesShareEnabled) {
+    if (!archivesShareEnabled) {
       toast.message("无法复制：请先登录并确保观心档案可用");
       return;
     }
     setCopyShareLinkBusy(true);
     try {
-      const { path } = await postArchiveShare(effectiveArchiveId);
+      const archiveId = await waitForArchiveId();
+      if (!archiveId) {
+        toast.message("报告尚未就绪，请稍候");
+        return;
+      }
+      const { path } = await postArchiveShare(archiveId);
       const origin = process.env.APP_URL || window.location.origin;
       const shareUrl = `${origin.replace(/\/$/, "")}${path}`;
       await navigator.clipboard.writeText(composeShareClipText(shareUrl));
@@ -528,6 +633,32 @@ export const Interpretation: React.FC<InterpretationProps> = ({
               </div>
               <h3 className="font-serif text-3xl font-bold tracking-tight text-ink sm:text-4xl">观心报告</h3>
               <div className="h-px w-32 bg-ink/10" />
+              {!fromArchive && reportReadyForFollowUp && (
+                <p className="max-w-md font-serif text-xs text-ink/40">
+                  已为你保留 {archiveRetentionDays} 天
+                  {showExpirySoonHint && (
+                    <span className="mt-1 block text-brand/80">
+                      即将过期，请及时分享或回看
+                    </span>
+                  )}
+                </p>
+              )}
+              {autosaveFailed && !fromArchive && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    autosaveDoneRef.current = false;
+                    setAutosaveFailed(false);
+                    void runAutosave().catch(() => {
+                      setAutosaveFailed(true);
+                      toast.error("档案未能自动保存，请检查网络");
+                    });
+                  }}
+                  className="font-serif text-xs text-brand underline-offset-2 hover:underline"
+                >
+                  重试自动保存
+                </button>
+              )}
             </div>
           )}
 
@@ -647,6 +778,9 @@ export const Interpretation: React.FC<InterpretationProps> = ({
                 placeholder="在此写下你的觉察..."
                 value={reflection}
                 onChange={(e) => setReflection(e.target.value)}
+                onBlur={() => {
+                  if (!fromArchive) void patchReflectionToArchive();
+                }}
                 readOnly={fromArchive}
                 rows={8}
                 className={cn(
@@ -656,53 +790,16 @@ export const Interpretation: React.FC<InterpretationProps> = ({
                   fromArchive && "cursor-default bg-white/20 text-ink/70"
                 )}
               />
-              {!fromArchive ? (
-                <Button
-                  type="button"
-                  disabled={saveLoading || saveDone}
-                  onClick={async () => {
-                    if (!onSave) return;
-                    setSaveLoading(true);
-                    try {
-                      const payload = buildSavePayload();
-                      const item = await onSave(payload);
-                      if (item && typeof item === "object" && "id" in item && typeof (item as HistoryItem).id === "string") {
-                        setSavedItemId((item as HistoryItem).id);
-                        if ((item as HistoryItem).share_active) {
-                          setHasActiveShare(true);
-                        }
-                      }
-                      setSaveDone(true);
-                    } catch (e) {
-                      const msg = e instanceof Error ? e.message : "保存失败";
-                      toast.error(msg);
-                    } finally {
-                      setSaveLoading(false);
-                    }
-                  }}
-                  className={cn(
-                    "h-auto min-h-14 w-full rounded-full bg-ink py-6 font-serif text-lg font-bold tracking-widest text-bg shadow-xl shadow-ink/10",
-                    "hover:bg-ink/90 hover:opacity-100",
-                    "focus-visible:ring-brand/40",
-                    (saveLoading || saveDone) && "pointer-events-none opacity-70"
-                  )}
-                >
-                  {saveLoading ? (
-                    <span className="inline-flex items-center justify-center gap-2">
-                      <Loader2 className="animate-spin" size={22} aria-hidden />
-                      保存中…
-                    </span>
-                  ) : saveDone ? (
-                    "已保存"
-                  ) : (
-                    "保存这次照见"
-                  )}
-                </Button>
-              ) : (
+              {fromArchive ? (
                 <p className="rounded-full border border-ink/10 bg-white/40 px-6 py-4 text-center font-serif text-sm text-ink/45">
                   本条已在观心档案中
+                  {typeof archiveExpiresAt === "number" && (
+                    <span className="mt-1 block text-ink/35">
+                      剩余 {daysUntilExpiry(archiveExpiresAt)} 天
+                    </span>
+                  )}
                 </p>
-              )}
+              ) : null}
             </div>
 
             <div className="flex flex-col justify-between gap-8 lg:pt-1">

@@ -30,7 +30,7 @@
 | 三条深入问句（deep-inquiry） | 已上线 | `POST /api/interpret/deep-inquiry`；会员档门槛见 Home |
 | 8 轮深度对话（Deep Dialogue） | 已上线 | [`DeepDialogue.tsx`](../src/components/IChing/DeepDialogue.tsx)；会话草稿 **localStorage** `iching_deep_dialogue_*` |
 | 邮箱六位镜证登录 | 已上线 | [`LoginDialog.tsx`](../src/components/auth/LoginDialog.tsx)、`POST /api/auth/send-otp`、`POST /api/auth/verify-otp` |
-| 观心档案（云端） | 已上线（需 Supabase + 登录） | `interpret_saved_report`；`GET/POST/DELETE /api/archives*` |
+| 观心档案（云端） | 已上线（需 Supabase + 登录） | `interpret_saved_report`；解读成功后**自动保存**；免费 **7 天** / 有效 standard **180 天**（跟人走，`expires_at`）；`GET/POST/PATCH/DELETE /api/archives*` |
 | 分享链接创建/撤销 | 已上线 | `POST/DELETE /api/archives/:id/share`；公开 `GET /api/share/:token` |
 | 分享只读页 | 已上线 | [`SharedReportView.tsx`](../src/pages/SharedReportView.tsx)、路由 `/s/:token` |
 | 档案列表与搜索 | 已上线 | Home `history` 态、[`History.tsx`](../src/components/IChing/History.tsx) |
@@ -49,7 +49,7 @@ landing → divination → interpretation → history
 |------|----------|----------|
 | landing | 输入困惑、登录 | 校验 `question`；未登录点起卦会 toast 并打开登录框 |
 | divination | 选时间/铜钱起卦 | 生成六爻 → `handleComplete` → 生成 `interpretClientSessionId` |
-| interpretation | 观看 SSE 报告、保存、追问、分享 | 扣额度；可 `postArchive`；分享依赖 `savedReportId` 或档案 id |
+| interpretation | 观看 SSE 报告、追问、觉察、分享 | 扣额度；流结束自动 `postArchive`（upsert）；追问/觉察 `PATCH`；分享须已有档案 id |
 | history | 浏览/搜索档案 | `fetchArchives`；点条目回到 interpretation（带已保存正文） |
 
 独立路由（[`App.tsx`](../src/App.tsx)）：
@@ -74,7 +74,8 @@ landing → divination → interpretation → history
 | POST | `/api/interpret/stream` | 观心报告 SSE |
 | POST | `/api/interpret/deep-inquiry` | 三条深入问句 |
 | POST | `/api/chat/stream` | 深度对话 SSE |
-| GET/POST/DELETE | `/api/archives` | 档案列表/保存/清空 |
+| GET/POST/DELETE | `/api/archives` | 档案列表（默认未过期）/ 自动保存 upsert / 清空 |
+| PATCH | `/api/archives/:id` | 更新解读正文或深入追问 |
 | DELETE | `/api/archives/:id` | 删除单条 |
 | POST/DELETE | `/api/archives/:id/share` | 创建/撤销分享 |
 | GET | `/api/share/:token` | 公开只读报告 |
@@ -86,7 +87,7 @@ landing → divination → interpretation → history
 | README § 认知档案 | 仅 localStorage | 登录 + Supabase 云端档案；deep dialogue 仍用 localStorage 草稿 |
 | README § 核心功能 | 未列登录/会员/分享 | 本文 §3、§5 |
 | backend-best-practices §1 | 「档案不经后端持久化」 | 已持久化至 `interpret_saved_report`（AI 转发逻辑仍在 ark-api） |
-| AGENTS.md 产品一句 | 仅 localStorage | 可改为「本地 + 云端档案」；PRD 以本文为准 |
+| AGENTS.md 产品一句 | 仅 localStorage | 已改为云端自动保存 + 分层保留；PRD 以本文为准 |
 
 ## 7. 开放产品议题（供头脑风暴，非承诺）
 
@@ -95,7 +96,7 @@ landing → divination → interpretation → history
 - 未登录体验策略（是否恢复纯本地试用、与额度关系）
 - 多语言、无障碍、导出 PDF
 - 深度对话是否云端同步、跨设备续聊
-- 分享页 SEO、过期策略、访问统计
+- 分享页 SEO、访问统计（报告过期与 pg_cron 物理删除见 PRD-00002）
 
 ## 8. PRD 协作约定
 

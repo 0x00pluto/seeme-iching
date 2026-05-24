@@ -71,8 +71,12 @@ export const Home: React.FC = () => {
   const [selectedArchiveItemId, setSelectedArchiveItemId] = useState<string | null>(null);
   /** 打开该条档案时列表接口是否报告仍有有效分享 */
   const [selectedArchiveShareActive, setSelectedArchiveShareActive] = useState(false);
-  /** 当场「保存这次照见」成功后写入，供分享 API 使用（与档案 id 互斥由下方表达式合并） */
+  /** 自动保存成功后写入，供分享 API 使用（与档案 id 互斥由下方表达式合并） */
   const [savedReportId, setSavedReportId] = useState<string | null>(null);
+  /** 从档案进入时该条的 expiresAt（毫秒） */
+  const [selectedArchiveExpiresAt, setSelectedArchiveExpiresAt] = useState<number | undefined>(
+    undefined,
+  );
   const canStartDivination = question.trim().length > 0;
 
   const archivesRemote = Boolean(authUser && archivesBackendConfigured);
@@ -202,11 +206,15 @@ export const Home: React.FC = () => {
           : {}),
       });
       setHistory((prev) => {
-        if (prev.some((h) => h.id === item.id)) return prev;
+        const idx = prev.findIndex((h) => h.id === item.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = item;
+          return next;
+        }
         return [item, ...prev];
       });
       setSavedReportId(item.id);
-      toast.success("观心档案已保存");
       return item;
     },
     [authUser, archivesBackendConfigured, interpretClientSessionId, question, lines],
@@ -233,6 +241,7 @@ export const Home: React.FC = () => {
   const handleComplete = (newLines: LineType[]) => {
     setArchivePayload(null);
     setSelectedArchiveItemId(null);
+    setSelectedArchiveExpiresAt(undefined);
     setSavedReportId(null);
     setInterpretClientSessionId(crypto.randomUUID());
     setLines(newLines);
@@ -258,6 +267,7 @@ export const Home: React.FC = () => {
     setSavedReportId(null);
     setSelectedArchiveShareActive(Boolean(item.share_active));
     setSelectedArchiveItemId(item.id);
+    setSelectedArchiveExpiresAt(item.expiresAt);
     setArchivePayload({
       markdown: item.interpretation,
       deepInquiryQuestions: item.deepInquiryQuestions,
@@ -270,6 +280,7 @@ export const Home: React.FC = () => {
     if (state === "interpretation") {
       setArchivePayload(null);
       setSelectedArchiveItemId(null);
+      setSelectedArchiveExpiresAt(undefined);
       setInterpretClientSessionId(null);
       setSavedReportId(null);
       setState("divination");
@@ -679,7 +690,11 @@ export const Home: React.FC = () => {
                 archivesShareEnabled={Boolean(authUser && archivesBackendConfigured)}
                 shareReportId={selectedArchiveItemId ?? savedReportId}
                 initialShareActive={selectedArchiveItemId ? selectedArchiveShareActive : undefined}
-                onSave={persistArchive}
+                archiveRetentionDays={entitlements?.archiveRetentionDays ?? 7}
+                initialArchiveExpiresAt={
+                  selectedArchiveItemId ? selectedArchiveExpiresAt : undefined
+                }
+                onSave={selectedArchiveItemId ? undefined : persistArchive}
               />
             </motion.section>
           )}

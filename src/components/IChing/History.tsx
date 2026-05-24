@@ -6,6 +6,7 @@ import { BookOpen, ChevronRight, Clock, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export interface HistoryItem {
   id: string;
@@ -17,6 +18,12 @@ export interface HistoryItem {
   deepInquiryQuestions?: string[];
   /** 是否存在未撤销的公开分享（由 GET /api/archives 填充） */
   share_active?: boolean;
+  /** 报告失效时刻（毫秒时间戳） */
+  expiresAt?: number;
+}
+
+function daysUntilExpiry(expiresAtMs: number): number {
+  return Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 86_400_000));
 }
 
 /** 摘取观心报告首行可读预览，供列表底栏展示（非完整 Markdown 渲染） */
@@ -198,6 +205,16 @@ export const History: React.FC<HistoryProps> = ({
                   </div>
                   <span className="font-serif text-[10px] uppercase tracking-widest text-ink/25">
                     {format(item.timestamp, "MM.dd / HH:mm", { locale: zhCN })}
+                    {typeof item.expiresAt === "number" && (
+                      <span
+                        className={cn(
+                          "ml-2",
+                          daysUntilExpiry(item.expiresAt) <= 1 && "text-brand/70",
+                        )}
+                      >
+                        · 剩余 {daysUntilExpiry(item.expiresAt)} 天
+                      </span>
+                    )}
                   </span>
                 </div>
               </div>

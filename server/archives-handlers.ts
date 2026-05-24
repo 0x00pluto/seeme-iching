@@ -1,6 +1,10 @@
 import { createServerSupabase } from "./supabase-client.js";
 import { getSessionFromRequest } from "./auth-handlers.js";
 import { isQuotaBackendConfigured } from "./membership-quota.js";
+import {
+  computeExpiresAt,
+  resolveRetentionDaysForUser,
+} from "./archive-retention.js";
 
 /** 观心档案接口：依赖 Cookie 会话；无 session 时各 handler 返回 401（与 Express/Vercel 外层 `requireAuth` 双保险）。 */
 
@@ -14,6 +18,8 @@ export type ArchiveHistoryItemJson = {
   deepInquiryQuestions?: string[];
   /** 是否存在未撤销的公开分享链接 */
   share_active?: boolean;
+  /** 报告失效时刻（毫秒时间戳） */
+  expiresAt?: number;
 };
 
 type DbRow = {
@@ -25,6 +31,7 @@ type DbRow = {
   interpretation: string;
   deep_inquiry_questions: unknown | null;
   saved_at: string;
+  expires_at: string;
 };
 
 const LINE_VALUES = new Set([6, 7, 8, 9]);
@@ -49,11 +56,25 @@ function rowToItem(row: DbRow): ArchiveHistoryItemJson {
     question: row.question ?? "",
     lines,
     interpretation: row.interpretation,
+    expiresAt: new Date(row.expires_at).getTime(),
   };
   if (isValidDeepQuestions(deep)) {
     base.deepInquiryQuestions = deep;
   }
   return base;
+}
+
+async function attachShareActive(
+  sb: ReturnType<typeof createServerSupabase>,
+  item: ArchiveHistoryItemJson,
+): Promise<ArchiveHistoryItemJson> {
+  const { data: activeLink } = await sb
+    .from("interpret_share_link")
+    .select("id")
+    .eq("report_id", item.id)
+    .is("revoked_at", null)
+    .maybeSingle();
+  return { ...item, share_active: Boolean(activeLink) };
 }
 
 function unauthorized(): { status: number; json: Record<string, unknown> } {
@@ -67,6 +88,10 @@ function notConfigured(): { status: number; json: Record<string, unknown> } {
   };
 }
 
+function archiveExpired(): { status: number; json: Record<string, unknown> } {
+  return { status: 410, json: { error: "观心报告已过期" } };
+}
+
 export async function handleArchivesGet(cookieHeader: string | undefined): Promise<{
   status: number;
   json: Record<string, unknown>;
@@ -75,11 +100,13 @@ export async function handleArchivesGet(cookieHeader: string | undefined): Promi
   if (!session) return unauthorized();
   if (!isQuotaBackendConfigured()) return notConfigured();
 
+  const nowIso = new Date().toISOString();
   const sb = createServerSupabase();
   const { data, error } = await sb
     .from("interpret_saved_report")
     .select("*")
     .eq("user_id", session.sub)
+    .gt("expires_at", nowIso)
     .order("saved_at", { ascending: false });
 
   if (error) {
@@ -135,6 +162,11 @@ export async function handleArchivesPost(
     return { status: 400, json: { error: "deep_inquiry_questions 须为长度 3 的非空字符串数组或省略" } };
   }
 
+  const sb = createServerSupabase();
+  const retentionDays = await resolveRetentionDaysForUser(session.sub);
+  const savedAt = new Date();
+  const expiresAt = computeExpiresAt(savedAt, retentionDays);
+
   const insertRow = {
     user_id: session.sub,
     client_session_id: clientSessionId,
@@ -145,43 +177,125 @@ export async function handleArchivesPost(
       deepInquiryQuestions !== undefined && Array.isArray(deepInquiryQuestions)
         ? deepInquiryQuestions
         : null,
+    expires_at: expiresAt,
   };
 
-  const sb = createServerSupabase();
   const { data, error } = await sb.from("interpret_saved_report").insert(insertRow).select("*").single();
 
   if (error) {
     if (error.code === "23505") {
-      const { data: existing, error: selErr } = await sb
+      const updatePayload: Record<string, unknown> = { interpretation };
+      if (deepInquiryQuestions !== undefined && Array.isArray(deepInquiryQuestions)) {
+        updatePayload.deep_inquiry_questions = deepInquiryQuestions;
+      }
+
+      const { data: updated, error: updErr } = await sb
         .from("interpret_saved_report")
-        .select("*")
+        .update(updatePayload)
         .eq("user_id", session.sub)
         .eq("client_session_id", clientSessionId)
+        .gt("expires_at", new Date().toISOString())
+        .select("*")
         .maybeSingle();
-      if (selErr || !existing) {
-        return {
-          status: 409,
-          json: { code: "ARCHIVE_ALREADY_SAVED", error: "该次照见已保存过" },
-        };
+
+      if (updErr) {
+        return { status: 500, json: { error: "更新档案失败", detail: updErr.message } };
       }
-      const base = rowToItem(existing as DbRow);
-      const { data: activeLink } = await sb
-        .from("interpret_share_link")
-        .select("id")
-        .eq("report_id", base.id)
-        .is("revoked_at", null)
-        .maybeSingle();
-      const item: ArchiveHistoryItemJson = { ...base, share_active: Boolean(activeLink) };
-      return {
-        status: 409,
-        json: { code: "ARCHIVE_ALREADY_SAVED", error: "该次照见已保存过", id: item.id, item },
-      };
+      if (!updated) {
+        const { data: existing } = await sb
+          .from("interpret_saved_report")
+          .select("*")
+          .eq("user_id", session.sub)
+          .eq("client_session_id", clientSessionId)
+          .maybeSingle();
+        if (existing && new Date((existing as DbRow).expires_at).getTime() <= Date.now()) {
+          return archiveExpired();
+        }
+        return { status: 404, json: { error: "记录不存在" } };
+      }
+
+      const item = await attachShareActive(sb, rowToItem(updated as DbRow));
+      return { status: 200, json: { item } };
     }
     return { status: 500, json: { error: "保存失败", detail: error.message } };
   }
 
-  const item: ArchiveHistoryItemJson = { ...rowToItem(data as DbRow), share_active: false };
+  const item = await attachShareActive(sb, { ...rowToItem(data as DbRow), share_active: false });
   return { status: 201, json: { item } };
+}
+
+export async function handleArchivesPatch(
+  cookieHeader: string | undefined,
+  id: string,
+  body: unknown,
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  const session = getSessionFromRequest(cookieHeader);
+  if (!session) return unauthorized();
+  if (!isQuotaBackendConfigured()) return notConfigured();
+
+  const uuid = typeof id === "string" ? id.trim() : "";
+  if (!uuid || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)) {
+    return { status: 400, json: { error: "无效的 id" } };
+  }
+
+  const b = body as Record<string, unknown>;
+  const interpretation = b.interpretation;
+  const deepInquiryQuestions = b.deep_inquiry_questions;
+
+  if (interpretation !== undefined && typeof interpretation !== "string") {
+    return { status: 400, json: { error: "interpretation 须为字符串" } };
+  }
+  if (typeof interpretation === "string" && !interpretation.trim()) {
+    return { status: 400, json: { error: "interpretation 不能为空" } };
+  }
+  if (deepInquiryQuestions !== undefined && !isValidDeepQuestions(deepInquiryQuestions)) {
+    return { status: 400, json: { error: "deep_inquiry_questions 须为长度 3 的非空字符串数组或省略" } };
+  }
+  if (interpretation === undefined && deepInquiryQuestions === undefined) {
+    return { status: 400, json: { error: "请提供 interpretation 或 deep_inquiry_questions" } };
+  }
+
+  const sb = createServerSupabase();
+  const { data: existing, error: selErr } = await sb
+    .from("interpret_saved_report")
+    .select("*")
+    .eq("user_id", session.sub)
+    .eq("id", uuid)
+    .maybeSingle();
+
+  if (selErr) {
+    return { status: 500, json: { error: "读取档案失败", detail: selErr.message } };
+  }
+  if (!existing) {
+    return { status: 404, json: { error: "记录不存在" } };
+  }
+  const row = existing as DbRow;
+  if (new Date(row.expires_at).getTime() <= Date.now()) {
+    return archiveExpired();
+  }
+
+  const updatePayload: Record<string, unknown> = {};
+  if (typeof interpretation === "string") {
+    updatePayload.interpretation = interpretation;
+  }
+  if (deepInquiryQuestions !== undefined && Array.isArray(deepInquiryQuestions)) {
+    updatePayload.deep_inquiry_questions = deepInquiryQuestions;
+  }
+
+  const { data: updated, error: updErr } = await sb
+    .from("interpret_saved_report")
+    .update(updatePayload)
+    .eq("user_id", session.sub)
+    .eq("id", uuid)
+    .select("*")
+    .single();
+
+  if (updErr) {
+    return { status: 500, json: { error: "更新档案失败", detail: updErr.message } };
+  }
+
+  const item = await attachShareActive(sb, rowToItem(updated as DbRow));
+  return { status: 200, json: { item } };
 }
 
 export async function handleArchivesDeleteAll(cookieHeader: string | undefined): Promise<{

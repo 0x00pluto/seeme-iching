@@ -32,6 +32,7 @@ Schema 变更的唯一来源：[`supabase/migrations/`](../supabase/migrations/)
 | `config_key` | `config_value` schema | 消费方 |
 |--------------|----------------------|--------|
 | `interpret.daily_quota` | `{"free_daily_limit": number, "standard_daily_limit": number}`；缺键或非数字字符串时 RPC 回退 **3 / 100** | `consume_interpret_quota`、`get_interpret_entitlements_snapshot` |
+| `archive.retention_days` | `{"free_days": number, "standard_days": number}`；缺键或非数字时回退 **7 / 180** | `resolve_archive_retention_days_for_user`、`refresh_archive_expires_for_user`、档案 insert |
 
 **种子**：migration 写入 `interpret.daily_quota` 默认 `3` / `100`（与历史硬编码一致）。
 
@@ -115,7 +116,7 @@ join public.user_membership m on m.user_id = u.id;
 
 ## `interpret_saved_report`
 
-用户通过前端「保存这次照见」写入的**观心解读全文**（含可选「自我觉察」Markdown 与三条深入追问）；与 `interpret_*` 域其它表一致，由服务端 `service_role` 访问。
+解读 SSE 成功后由前端**自动保存**的**观心解读全文**（含可选「自我觉察」Markdown 与三条深入追问）；与 `interpret_*` 域其它表一致，由服务端 `service_role` 访问。
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -126,13 +127,16 @@ join public.user_membership m on m.user_id = u.id;
 | `lines` | `jsonb` | 六爻 `LineType[]` 序列化 |
 | `interpretation` | `text` | 完整解读 Markdown |
 | `deep_inquiry_questions` | `jsonb` | 可空；非空时为长度 3 的字符串数组 |
-| `saved_at` | `timestamptz` | 保存时间，默认 `now()` |
+| `saved_at` | `timestamptz` | 保存时间，默认 `now()`；upsert/PATCH **不**刷新 |
+| `expires_at` | `timestamptz` | 报告失效时刻；insert 时 `saved_at + 当前档位保留天数`；`user_membership` 变更时批量刷新 |
 
 **唯一约束**：`(user_id, client_session_id)`，保证同一会话至多一条已保存记录。
 
-**索引**：`(user_id, saved_at desc)`，供按用户列表倒序查询。
+**索引**：`(user_id, saved_at desc)`；`(expires_at)`、`(user_id, expires_at)` 供列表过滤与清理。
 
-**HTTP**：`GET/POST /api/archives`、`DELETE /api/archives`（清空）、`DELETE /api/archives/:id`（单条）；同源 Cookie 会话，服务端 `service_role` 读写本表。
+**HTTP**：`GET/POST /api/archives`（GET 默认 `expires_at > now()`）、`PATCH /api/archives/:id`、`DELETE /api/archives`（清空）、`DELETE /api/archives/:id`（单条）；同源 Cookie 会话，服务端 `service_role` 读写本表。
+
+**定时清理（pg_cron）**：job `interpret-saved-report-purge`（默认 UTC 03:00）调用 `purge_expired_interpret_saved_reports()`，物理删除 `expires_at <= now()` 的行；`interpret_share_link` 随 FK **CASCADE**。
 
 ---
 
@@ -157,7 +161,7 @@ join public.user_membership m on m.user_id = u.id;
 
 - `POST /api/archives/:id/share`（需登录）：创建或返回该档案当前有效 `token`。
 - `DELETE /api/archives/:id/share`（需登录）：将该档案下未撤销行全部 **`revoked_at = now()`**。
-- `GET /api/share/:token`（**无需登录**）：返回 `question`、`lines`、`interpretation` 供只读页渲染。
+- `GET /api/share/:token`（**无需登录**）：返回 `question`、`lines`、`interpretation`；报告已过期 → **410** `链接已过期`。
 
 ---
 
@@ -198,7 +202,19 @@ join public.user_membership m on m.user_id = u.id;
 - `interpret`：`period`（`day`）、`timezone` / `calendar`（`Asia/Shanghai`）、`limit`、`used`、`resetsAt`。
 - `membership`：`isActive`（仅 **有效 standard** 为 `true`）、`tierCode`（对外过期或非付费为 `free`）、`activatedAt`、`expiresAt`（未激活时为 JSON null）。
 
-HTTP 层可将 `tierCode` 映射为展示名（见 `membership-quota.ts`）。
+HTTP 层可将 `tierCode` 映射为展示名（见 `membership-quota.ts`）；并附带 `archiveRetentionDays`（当前档位保留上限天数，7 或 180）。
+
+### `resolve_archive_retention_days_for_user(p_user_id uuid) → int`
+
+只读；返回该用户**当前**档案保留天数（有效 standard → `standard_days`，否则 `free_days`）。
+
+### `refresh_archive_expires_for_user(p_user_id uuid) → void`
+
+对该用户全部 `interpret_saved_report` 行重算 `expires_at = saved_at + 保留天数`；在 `user_membership` **INSERT/UPDATE** 触发器中调用。
+
+### `purge_expired_interpret_saved_reports() → bigint`
+
+删除 `expires_at <= now()` 的报告行，返回删除行数；由 **pg_cron** job `interpret-saved-report-purge` 每日调度；可手工 `SELECT` 联调。
 
 ---
 

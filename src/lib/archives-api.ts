@@ -12,6 +12,11 @@ export type PostArchiveBody = {
   deep_inquiry_questions?: string[];
 };
 
+export type PatchArchiveBody = {
+  interpretation?: string;
+  deep_inquiry_questions?: string[];
+};
+
 export async function fetchArchives(): Promise<{ items: HistoryItem[] }> {
   const res = await fetch("/api/archives", { credentials: "include" });
   const data = (await res.json()) as { items?: HistoryItem[]; error?: string; detail?: string };
@@ -21,7 +26,7 @@ export async function fetchArchives(): Promise<{ items: HistoryItem[] }> {
   return { items: data.items ?? [] };
 }
 
-/** 成功返回 `HistoryItem`；409 已保存时返回已有 `item`（幂等）。 */
+/** 成功返回 `HistoryItem`；201 新建或 200 upsert 更新。 */
 export async function postArchive(body: PostArchiveBody): Promise<HistoryItem> {
   const res = await fetch("/api/archives", {
     method: "POST",
@@ -43,6 +48,27 @@ export async function postArchive(body: PostArchiveBody): Promise<HistoryItem> {
   }
   if (!data.item) {
     throw new Error("保存响应缺少 item");
+  }
+  return data.item;
+}
+
+export async function patchArchive(id: string, body: PatchArchiveBody): Promise<HistoryItem> {
+  const res = await fetch(`/api/archives/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: jsonHeaders,
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json()) as {
+    item?: HistoryItem;
+    error?: string;
+    detail?: string;
+  };
+  if (!res.ok) {
+    throw new Error([data.error, data.detail].filter(Boolean).join("：") || "更新档案失败");
+  }
+  if (!data.item) {
+    throw new Error("更新响应缺少 item");
   }
   return data.item;
 }

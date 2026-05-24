@@ -8,6 +8,9 @@ export async function fetchSharedReport(token: string): Promise<SharedReportPayl
   const res = await fetch(`/api/share/${encodeURIComponent(token)}`);
   const data = (await res.json()) as SharedReportPayload & { error?: string; detail?: string };
   if (!res.ok) {
+    if (res.status === 410) {
+      throw new Error(data.error ?? "链接已过期");
+    }
     throw new Error([data.error, data.detail].filter(Boolean).join("：") || "加载失败");
   }
   return {

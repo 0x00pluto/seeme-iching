@@ -51,7 +51,7 @@ export async function handleArchiveSharePost(
   const sb = createServerSupabase();
   const { data: report, error: repErr } = await sb
     .from("interpret_saved_report")
-    .select("id")
+    .select("id, expires_at")
     .eq("id", reportId)
     .eq("user_id", session.sub)
     .maybeSingle();
@@ -60,6 +60,13 @@ export async function handleArchiveSharePost(
   }
   if (!report) {
     return { status: 404, json: { error: "记录不存在" } };
+  }
+  const reportExpires = (report as { expires_at?: string }).expires_at;
+  if (typeof reportExpires === "string" && new Date(reportExpires).getTime() <= Date.now()) {
+    return {
+      status: 403,
+      json: { error: "观心报告已过期，无法分享" },
+    };
   }
 
   const { data: active, error: selErr } = await sb
@@ -206,7 +213,7 @@ export async function handleShareGet(tokenRaw: string): Promise<{
   const reportId = (linkRow as { report_id: string }).report_id;
   const { data: report, error: repErr } = await sb
     .from("interpret_saved_report")
-    .select("question, lines, interpretation")
+    .select("question, lines, interpretation, expires_at")
     .eq("id", reportId)
     .maybeSingle();
 
@@ -219,6 +226,11 @@ export async function handleShareGet(tokenRaw: string): Promise<{
   }
   if (!report) {
     return { status: 404, json: { error: "链接不存在或已失效" }, cacheControl: "no-store" };
+  }
+
+  const reportExpires = (report as { expires_at?: string }).expires_at;
+  if (typeof reportExpires === "string" && new Date(reportExpires).getTime() <= Date.now()) {
+    return { status: 410, json: { error: "链接已过期" }, cacheControl: "no-store" };
   }
 
   const r = report as { question?: string; lines?: unknown; interpretation?: string };

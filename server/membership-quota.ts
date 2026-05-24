@@ -1,4 +1,5 @@
 import { createServerSupabase } from "./supabase-client.js";
+import { resolveRetentionDaysForUser } from "./archive-retention.js";
 
 const TIER_DISPLAY: Record<string, string> = {
   free: "免费",
@@ -96,6 +97,8 @@ export async function fetchEntitlementsPayload(userId: string): Promise<Record<s
   const tierCode = typeof m?.tierCode === "string" ? m.tierCode : "free";
   const interpret = snap?.interpret ?? {};
 
+  const archiveRetentionDays = await resolveRetentionDaysForUser(userId);
+
   return {
     interpret: {
       period: interpret.period ?? "day",
@@ -114,6 +117,7 @@ export async function fetchEntitlementsPayload(userId: string): Promise<Record<s
       activatedAt: m?.activatedAt ?? null,
       expiresAt: m?.expiresAt ?? null,
     },
+    archiveRetentionDays,
   };
 }
 
