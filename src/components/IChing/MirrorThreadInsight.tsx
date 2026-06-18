@@ -1,4 +1,3 @@
-import { daysUntilExpiry } from "@/lib/archive-expiry";
 import type { MirrorThreadToday } from "@/lib/mirror-thread-api";
 import { postMirrorThreadReadBeacon } from "@/lib/mirror-thread-api";
 import { cn } from "@/lib/utils";
@@ -139,10 +138,6 @@ export const MirrorThreadInsight: React.FC<MirrorThreadInsightProps> = ({
 
   if (!data) return null;
 
-  const expiresMs = new Date(data.sourceReportExpiresAt).getTime();
-  const daysLeft = Number.isFinite(expiresMs) ? daysUntilExpiry(expiresMs) : null;
-  const showFadeHint = daysLeft !== null && daysLeft <= 7;
-
   return (
     <section
       ref={rootRef}
@@ -157,13 +152,8 @@ export const MirrorThreadInsight: React.FC<MirrorThreadInsightProps> = ({
             <div className="h-px w-8 bg-brand/30" />
           </div>
           <p className="max-w-2xl font-serif text-lg md:text-xl leading-relaxed text-ink/40 italic">
-            不必起新卦，先把昨日的故事读完。
+            不必起新卦，先把昨日的故事读完
           </p>
-          {showFadeHint && daysLeft !== null ? (
-            <p className="font-serif text-sm text-ink/40">
-              这条叙事线还会在镜中保留 {daysLeft} 天。
-            </p>
-          ) : null}
         </div>
 
         <div className="flex w-full flex-col gap-8 text-left">
