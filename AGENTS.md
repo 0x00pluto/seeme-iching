@@ -30,7 +30,7 @@
 
 | 命令 | 用途 |
 |------|------|
-| `/team:product-manager` | 撰写 PRD → 落盘 [`prds/`](prds/) |
+| `/team:product-manager` | 撰写 PRD → 落盘 [`specs/prds/`](specs/prds/) |
 | `/team:prd-accept` | 对照代码验收并回写 PRD「工程验收状态」 |
 
 重装或变量说明见 [`docs/team-commands-install.md`](docs/team-commands-install.md)。

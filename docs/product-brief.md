@@ -100,6 +100,6 @@ landing → divination → interpretation → history
 
 ## 8. PRD 协作约定
 
-1. 使用 `/team:product-manager <feature-slug>` 产出 `prds/prd-NNNNN-<slug>.md`。
-2. 落盘后更新 [prds/prd-wiki-index.md](../prds/prd-wiki-index.md)。
+1. 使用 `/team:product-manager <feature-slug>` 产出 `specs/prds/prd-NNNNN-<slug>.md`。
+2. 落盘后更新 [specs/prds/prd-wiki-index.md](../specs/prds/prd-wiki-index.md)。
 3. 实现完成后 `/team:prd-accept <prd-ref>` 回写「工程验收状态」。

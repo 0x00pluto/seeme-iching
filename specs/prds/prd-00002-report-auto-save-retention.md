@@ -15,7 +15,7 @@ created: 2026-05-24T12:20:04Z
 | 状态 | backlog |
 | 范围 | 观心档案 `interpret_saved_report`、档案/分享 API、解读页 `Interpretation`；不含镜下 8 轮对话云端化 |
 | 关联文档 | docs/product-brief.md、docs/supabase-tables.md、docs/backend-best-practices.md、docs/supabase-migration-practices.md、AGENTS.md |
-| 父 PRD | 无（依赖已登录会话，见 prds/prd-00001-email-otp-login.md） |
+| 父 PRD | 无（依赖已登录会话，见 [prd-00001-email-otp-login.md](./prd-00001-email-otp-login.md)） |
 | 序号 | 00002 |
 
 ---

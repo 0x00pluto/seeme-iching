@@ -15,7 +15,7 @@ created: 2026-05-23T09:16:53Z
 | 状态 | backlog |
 | 范围 | 登录弹窗、Auth API、Supabase 邮件模板；不含短信/密码登录 |
 | 关联文档 | docs/product-brief.md、docs/backend-best-practices.md、docs/supabase-tables.md、AGENTS.md |
-| UI 参考图 | [prds/reference/login-otp-six-boxes-ui-reference.png](./reference/login-otp-six-boxes-ui-reference.png)（见 [prds/reference/README.md](./reference/README.md)） |
+| UI 参考图 | [login-otp-six-boxes-ui-reference.png](./reference/login-otp-six-boxes-ui-reference.png)（见 [reference/README.md](./reference/README.md)） |
 | 父 PRD | 无 |
 | 序号 | 00001 |
 
@@ -158,7 +158,7 @@ created: 2026-05-23T09:16:53Z
 
 #### 第二屏（code）
 
-布局参考 [`prds/reference/login-otp-six-boxes-ui-reference.png`](./reference/login-otp-six-boxes-ui-reference.png)（6 格分框 + 返回 + 倒计时信息架构；镜微为邮箱场景，文案见定稿表）。视觉延续 `rounded-[48px]`、`font-serif`、`bg-bg` / `text-ink`。
+布局参考 [`./reference/login-otp-six-boxes-ui-reference.png`](./reference/login-otp-six-boxes-ui-reference.png)（6 格分框 + 返回 + 倒计时信息架构；镜微为邮箱场景，文案见定稿表）。视觉延续 `rounded-[48px]`、`font-serif`、`bg-bg` / `text-ink`。
 
 ![第二屏 UI 参考：6 格验证码输入布局](./reference/login-otp-six-boxes-ui-reference.png)
 
@@ -395,4 +395,4 @@ stateDiagram-v2
 | 日期 | 说明 |
 |------|------|
 | 2026-05-23 | 初稿：邮箱 OTP 替换 Magic Link；6 格 UI；有效 30min / 重发 60s；镜微文案定稿表 |
-| 2026-05-23 | 参考图落盘 `prds/reference/login-otp-six-boxes-ui-reference.png` |
+| 2026-05-23 | 参考图落盘 `specs/prds/reference/login-otp-six-boxes-ui-reference.png` |

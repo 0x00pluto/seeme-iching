@@ -14,8 +14,8 @@
 | `/team:product-manager` | 头脑风暴 → 撰写 PRD → 落盘本目录 → 更新本索引 |
 | `/team:prd-accept` | 对照代码验收 PRD，回写文末「工程验收状态」与 frontmatter `status` |
 
-撰写 PRD 前请先读 [`docs/product-brief.md`](../docs/product-brief.md) 与 [`docs/doc_index.md`](../docs/doc_index.md)。
+撰写 PRD 前请先读 [`docs/product-brief.md`](../../docs/product-brief.md) 与 [`docs/doc_index.md`](../../docs/doc_index.md)。
 
-PRD 引用的截图与线框见 [`prds/reference/`](./reference/README.md)。
+PRD 引用的截图与线框见 [`specs/prds/reference/`](./reference/README.md)。
 
 母版维护于 Obsidian：`99_Assets/Vibecoding团队/团队成员/`。
