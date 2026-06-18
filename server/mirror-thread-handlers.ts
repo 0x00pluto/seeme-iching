@@ -1,20 +1,20 @@
-import OpenAI from "openai";
 import { getSessionFromRequest } from "./auth-handlers.js";
 import { isQuotaBackendConfigured } from "./membership-quota.js";
 import { createServerSupabase } from "./supabase-client.js";
-import { getActiveLlmBackend } from "./llm/registry.js";
 import {
-  daysBetweenShanghaiDates,
+  daysSinceSavedShanghai,
   getInsightDateShanghai,
-  toShanghaiDateString,
+  isMirrorThreadEligible,
 } from "./mirror-thread-date.js";
-import { extractEchoText } from "./mirror-thread-echo.js";
 import {
-  buildAbsenceShiftFallback,
-  buildMirrorThreadShiftUserPrompt,
-  buildOptionalPromptRule,
-  buildOvernightShiftFallback,
-} from "./prompts/mirror-thread-shift.js";
+  assembleDailyFallback,
+  assembleDailyFromSeed,
+  fetchSeedByReportId,
+  generateMirrorThreadSeed,
+  SYNC_BACKFILL_TIMEOUT_MS,
+  waitForSeedReady,
+  type MirrorThreadSeedRow,
+} from "./mirror-thread-seed.js";
 
 type SourceReportRow = {
   id: string;
@@ -46,7 +46,7 @@ export type MirrorThreadTodayJson = {
   sourceQuestion: string;
 };
 
-const LLM_SHIFT_TIMEOUT_MS = 2500;
+const SEED_WAIT_MS = 3_000;
 
 function unauthorized(): { status: number; json: Record<string, unknown> } {
   return { status: 401, json: { error: "未登录" } };
@@ -59,11 +59,8 @@ function notConfigured(): { status: number; json: Record<string, unknown> } {
   };
 }
 
-function chatContentOnly(
-  message: { content?: string | null; reasoning_content?: unknown } | null | undefined,
-): string {
-  if (!message || typeof message !== "object") return "";
-  return message.content ?? "";
+function logTodayEvent(event: string, fields: Record<string, unknown>) {
+  console.info(JSON.stringify({ event, ...fields, recordedAt: new Date().toISOString() }));
 }
 
 function rowToJson(
@@ -83,52 +80,6 @@ function rowToJson(
   };
 }
 
-async function generateShiftText(params: {
-  echoText: string;
-  question: string;
-  daysSinceSaved: number;
-}): Promise<string> {
-  const { echoText, question, daysSinceSaved } = params;
-  if (daysSinceSaved > 1) {
-    return buildAbsenceShiftFallback(daysSinceSaved);
-  }
-
-  const llm = getActiveLlmBackend();
-  const client = llm.getOpenAI();
-  if (!client) {
-    return buildOvernightShiftFallback(echoText);
-  }
-
-  const userContent = buildMirrorThreadShiftUserPrompt({ echoText, question, daysSinceSaved });
-
-  try {
-    const completionPromise = client.chat.completions.create(
-      llm.patchCompletionParams({
-        model: llm.getModelId(),
-        messages: [{ role: "user", content: userContent }],
-        stream: false,
-      }),
-    ) as Promise<OpenAI.Chat.ChatCompletion>;
-
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error("mirror_thread_shift_timeout")), LLM_SHIFT_TIMEOUT_MS);
-    });
-
-    const completion = await Promise.race([completionPromise, timeoutPromise]);
-    const text = chatContentOnly(
-      completion.choices[0]?.message as { content?: string | null; reasoning_content?: unknown },
-    ).trim();
-
-    if (text.length >= 40 && text.length <= 200) {
-      return text;
-    }
-  } catch (e) {
-    console.warn("mirror-thread shift LLM fallback:", e instanceof Error ? e.message : e);
-  }
-
-  return buildOvernightShiftFallback(echoText);
-}
-
 async function fetchSourceReportMeta(
   reportId: string,
 ): Promise<{ expiresAt: string; question: string }> {
@@ -144,9 +95,7 @@ async function fetchSourceReportMeta(
   };
 }
 
-async function fetchLatestSourceReport(
-  userId: string,
-): Promise<SourceReportRow | null> {
+async function fetchLatestSourceReport(userId: string): Promise<SourceReportRow | null> {
   const sb = createServerSupabase();
   const nowIso = new Date().toISOString();
   const { data, error } = await sb
@@ -164,10 +113,7 @@ async function fetchLatestSourceReport(
   return (data as SourceReportRow | null) ?? null;
 }
 
-async function fetchExistingDaily(
-  userId: string,
-  insightDate: string,
-): Promise<DailyRow | null> {
+async function fetchExistingDaily(userId: string, insightDate: string): Promise<DailyRow | null> {
   const sb = createServerSupabase();
   const { data, error } = await sb
     .from("interpret_mirror_thread_daily")
@@ -214,6 +160,79 @@ async function insertDailyRow(row: {
   return data as DailyRow;
 }
 
+async function resolveDailyContent(params: {
+  source: SourceReportRow;
+  daysSinceSaved: number;
+  userId: string;
+}): Promise<{
+  echoText: string;
+  shiftText: string;
+  optionalPrompt: string;
+  source: "seed" | "fallback";
+  degraded?: string;
+}> {
+  const { source, daysSinceSaved, userId } = params;
+  let seed: MirrorThreadSeedRow | null = await fetchSeedByReportId(source.id);
+
+  if (seed?.status === "pending") {
+    seed = await waitForSeedReady(source.id, SEED_WAIT_MS);
+  }
+
+  if (seed?.status === "ready") {
+    const assembled = assembleDailyFromSeed(seed, daysSinceSaved);
+    logTodayEvent("mirror_thread_today_assembled", {
+      reportId: source.id,
+      userId,
+      source: "seed",
+      daysSinceSaved,
+    });
+    return { ...assembled, source: "seed" };
+  }
+
+  if (!seed || seed.status === "failed" || seed.status === "pending") {
+    const reason =
+      seed?.status === "pending" ? "seed_pending_timeout" : seed?.status === "failed" ? "seed_failed" : "no_seed";
+    const backfilled = await generateMirrorThreadSeed(
+      {
+        reportId: source.id,
+        userId,
+        question: source.question,
+        interpretation: source.interpretation,
+      },
+      { syncTimeoutMs: SYNC_BACKFILL_TIMEOUT_MS },
+    );
+
+    if (backfilled?.status === "ready") {
+      const assembled = assembleDailyFromSeed(backfilled, daysSinceSaved);
+      logTodayEvent("mirror_thread_today_assembled", {
+        reportId: source.id,
+        userId,
+        source: "seed",
+        daysSinceSaved,
+        backfill: true,
+      });
+      return { ...assembled, source: "seed" };
+    }
+
+    logTodayEvent("mirror_thread_today_degraded", {
+      reportId: source.id,
+      userId,
+      reason,
+    });
+    const fallback = assembleDailyFallback(source, daysSinceSaved);
+    logTodayEvent("mirror_thread_today_assembled", {
+      reportId: source.id,
+      userId,
+      source: "fallback",
+      daysSinceSaved,
+    });
+    return { ...fallback, source: "fallback", degraded: reason };
+  }
+
+  const assembled = assembleDailyFromSeed(seed, daysSinceSaved);
+  return { ...assembled, source: "seed" };
+}
+
 export async function handleMirrorThreadToday(cookieHeader: string | undefined): Promise<{
   status: number;
   json?: Record<string, unknown>;
@@ -225,6 +244,17 @@ export async function handleMirrorThreadToday(cookieHeader: string | undefined):
   const insightDate = getInsightDateShanghai();
 
   try {
+    const source = await fetchLatestSourceReport(session.sub);
+    if (!source) {
+      return { status: 204 };
+    }
+
+    if (!isMirrorThreadEligible(source.saved_at, insightDate)) {
+      return { status: 204 };
+    }
+
+    const daysSinceSaved = daysSinceSavedShanghai(source.saved_at, insightDate);
+
     const existing = await fetchExistingDaily(session.sub, insightDate);
     if (existing) {
       const meta = await fetchSourceReportMeta(existing.source_report_id);
@@ -234,28 +264,19 @@ export async function handleMirrorThreadToday(cookieHeader: string | undefined):
       };
     }
 
-    const source = await fetchLatestSourceReport(session.sub);
-    if (!source) {
-      return { status: 204 };
-    }
-
-    const echoText = extractEchoText(source.interpretation);
-    const savedDate = toShanghaiDateString(source.saved_at);
-    const daysSinceSaved = daysBetweenShanghaiDates(savedDate, insightDate);
-    const shiftText = await generateShiftText({
-      echoText,
-      question: source.question,
+    const content = await resolveDailyContent({
+      source,
       daysSinceSaved,
+      userId: session.sub,
     });
-    const optionalPrompt = buildOptionalPromptRule(echoText);
 
     const inserted = await insertDailyRow({
       userId: session.sub,
       insightDate,
       sourceReportId: source.id,
-      echoText,
-      shiftText,
-      optionalPrompt,
+      echoText: content.echoText,
+      shiftText: content.shiftText,
+      optionalPrompt: content.optionalPrompt,
     });
 
     return {

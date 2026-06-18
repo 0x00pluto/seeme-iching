@@ -1,6 +1,7 @@
 import { createServerSupabase } from "./supabase-client.js";
 import { getSessionFromRequest } from "./auth-handlers.js";
 import { isQuotaBackendConfigured } from "./membership-quota.js";
+import { enqueueMirrorThreadSeed } from "./mirror-thread-seed.js";
 import {
   computeExpiresAt,
   resolveRetentionDaysForUser,
@@ -215,12 +216,34 @@ export async function handleArchivesPost(
       }
 
       const item = await attachShareActive(sb, rowToItem(updated as DbRow));
+      const updatedRow = updated as DbRow;
+      enqueueMirrorThreadSeed({
+        reportId: item.id,
+        userId: session.sub,
+        question: updatedRow.question ?? question,
+        interpretation: updatedRow.interpretation,
+        deepInquiryQuestions: isValidDeepQuestions(updatedRow.deep_inquiry_questions)
+          ? (updatedRow.deep_inquiry_questions as string[])
+          : null,
+        lines: isValidLinesJson(updatedRow.lines) ? (updatedRow.lines as number[]) : undefined,
+      });
       return { status: 200, json: { item } };
     }
     return { status: 500, json: { error: "保存失败", detail: error.message } };
   }
 
   const item = await attachShareActive(sb, { ...rowToItem(data as DbRow), share_active: false });
+  const insertedRow = data as DbRow;
+  enqueueMirrorThreadSeed({
+    reportId: item.id,
+    userId: session.sub,
+    question: insertedRow.question ?? question,
+    interpretation: insertedRow.interpretation,
+    deepInquiryQuestions: isValidDeepQuestions(insertedRow.deep_inquiry_questions)
+      ? (insertedRow.deep_inquiry_questions as string[])
+      : null,
+    lines: isValidLinesJson(insertedRow.lines) ? (insertedRow.lines as number[]) : undefined,
+  });
   return { status: 201, json: { item } };
 }
 

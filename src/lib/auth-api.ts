@@ -30,6 +30,8 @@ export type MirrorThreadTodaySummary = {
   enabled: boolean;
   insightDate?: string;
   sourceReportExpiresAt?: string;
+  /** 当日尚无 daily 时，主素材 seed 状态（R1） */
+  seedStatus?: "pending" | "ready" | "failed";
 };
 
 export type AuthMeResponse = {

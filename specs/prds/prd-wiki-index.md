@@ -7,6 +7,7 @@
 | 00001 | [prd-00001-email-otp-login.md](./prd-00001-email-otp-login.md) | 邮箱六位镜证登录：Supabase OTP 替换魔法链接；6 格 UI；有效 30 分钟、重发 60 秒 | backlog |
 | 00002 | [prd-00002-report-auto-save-retention.md](./prd-00002-report-auto-save-retention.md) | 观心报告自动保存；免费 7 天 / 会员 180 天保留；移除手动保存、保留分享 | backlog |
 | 00003 | [prd-00003-mirror-thread-daily-insight.md](./prd-00003-mirror-thread-daily-insight.md) | 镜脉叙事续照：明日之约 + 今日续照懒生成；内因 D1 回访；不扣解读额度 | backlog |
+| 00004 | [prd-00004-mirror-thread-seed-pregen.md](./prd-00004-mirror-thread-seed-pregen.md) | 镜脉续照 v2：autosave 异步 seed 预写 + 7 档 shift 选档；echo Hero；打开日零 LLM | backlog |
 
 ## 协作命令
 

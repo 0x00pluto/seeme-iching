@@ -24,3 +24,17 @@ export function daysBetweenShanghaiDates(fromYmd: string, toYmd: string): number
   };
   return Math.round((parse(toYmd) - parse(fromYmd)) / 86_400_000);
 }
+
+/** 主素材 saved_at 相对 insight 日的整天差（东八区日历日） */
+export function daysSinceSavedShanghai(
+  savedAtIso: string | Date,
+  insightDateYmd?: string,
+): number {
+  const insight = insightDateYmd ?? getInsightDateShanghai();
+  return daysBetweenShanghaiDates(toShanghaiDateString(savedAtIso), insight);
+}
+
+/** 续照仅跨日展示：autosave 当日只展示明日之约，次日及以后才 eligible */
+export function isMirrorThreadEligible(savedAtIso: string | Date, insightDateYmd?: string): boolean {
+  return daysSinceSavedShanghai(savedAtIso, insightDateYmd) >= 1;
+}

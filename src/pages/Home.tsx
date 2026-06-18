@@ -341,6 +341,11 @@ export const Home: React.FC = () => {
 
   const mirrorInsightEnabled = Boolean(authUser && archivesBackendConfigured);
   const showMirrorLoading = mirrorInsightEnabled && mirrorThreadLoading;
+  const showMirrorPregenHint =
+    !mirrorThreadSummary?.insightDate &&
+    (mirrorThreadSummary?.seedStatus === "pending" ||
+      mirrorThreadSummary?.seedStatus === "failed" ||
+      mirrorThreadSummary?.seedStatus === undefined);
   const showMirrorHero =
     mirrorInsightEnabled && !mirrorThreadLoading && mirrorThreadInsight && mirrorThreadUiMode === "expanded";
   const showMirrorStrip =
@@ -354,6 +359,7 @@ export const Home: React.FC = () => {
         <MirrorThreadInsight
           variant="loading"
           data={null}
+          showPregenHint={showMirrorPregenHint}
         />
       );
     }
@@ -371,6 +377,7 @@ export const Home: React.FC = () => {
   }, [
     mirrorInsightEnabled,
     showMirrorLoading,
+    showMirrorPregenHint,
     showMirrorHero,
     mirrorThreadInsight,
     handleContinueMirror,

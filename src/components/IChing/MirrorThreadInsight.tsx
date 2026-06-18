@@ -10,6 +10,8 @@ type MirrorThreadInsightProps = {
   data: MirrorThreadToday | null;
   variant: MirrorThreadInsightVariant;
   className?: string;
+  /** seed pending / 补跑中：展示「镜脉正在续照…」 */
+  showPregenHint?: boolean;
   onContinue?: () => void;
   onStartFresh?: () => void;
 };
@@ -91,14 +93,25 @@ function useReadDurationBeacon(data: MirrorThreadToday | null, enabled: boolean)
   return rootRef;
 }
 
-function HeroLoading({ className }: { className?: string }) {
+function HeroLoading({
+  className,
+  showPregenHint,
+}: {
+  className?: string;
+  showPregenHint?: boolean;
+}) {
   return (
     <section
       className={cn("w-full max-w-4xl text-center", className)}
       aria-busy="true"
-      aria-label="镜脉续照加载中"
+      aria-label={showPregenHint ? "镜脉正在续照" : "镜脉续照加载中"}
     >
       <div className="flex flex-col items-center gap-6 animate-pulse">
+        {showPregenHint ? (
+          <p className="font-serif text-lg md:text-xl leading-relaxed text-ink/40 italic animate-none">
+            镜脉正在续照…
+          </p>
+        ) : null}
         <div className="h-4 w-56 rounded bg-ink/10" />
         <div className="h-6 w-full max-w-2xl rounded bg-ink/5" />
         <div className="h-10 w-full max-w-3xl rounded bg-ink/5" />
@@ -113,6 +126,7 @@ export const MirrorThreadInsight: React.FC<MirrorThreadInsightProps> = ({
   data,
   variant,
   className,
+  showPregenHint,
   onContinue,
   onStartFresh,
 }) => {
@@ -120,7 +134,7 @@ export const MirrorThreadInsight: React.FC<MirrorThreadInsightProps> = ({
   const rootRef = useReadDurationBeacon(data, trackReads);
 
   if (variant === "loading") {
-    return <HeroLoading className={className} />;
+    return <HeroLoading className={className} showPregenHint={showPregenHint} />;
   }
 
   if (!data) return null;
@@ -154,18 +168,15 @@ export const MirrorThreadInsight: React.FC<MirrorThreadInsightProps> = ({
 
         <div className="flex w-full flex-col gap-8 text-left">
           <div className="mx-auto w-full max-w-3xl">
-            <p className="mb-3 font-serif text-xs uppercase tracking-[0.35em] text-ink/30">
-              回响
+            <p className="mb-4 font-serif text-xs uppercase tracking-[0.35em] text-ink/30">
+              你曾照见
             </p>
-            <blockquote className="border-l-2 border-brand/30 pl-6 font-serif text-2xl md:text-3xl leading-relaxed text-ink/85">
+            <blockquote className="font-serif text-3xl md:text-4xl leading-relaxed text-ink/90">
               {data.echoText}
             </blockquote>
           </div>
 
           <div className="mx-auto w-full max-w-3xl">
-            <p className="mb-3 font-serif text-xs uppercase tracking-[0.35em] text-ink/30">
-              位移
-            </p>
             <p className="font-serif text-lg md:text-xl leading-relaxed text-ink/50 italic">
               {data.shiftText}
             </p>

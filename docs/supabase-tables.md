@@ -142,7 +142,7 @@ join public.user_membership m on m.user_id = u.id;
 
 ## `interpret_mirror_thread_daily`
 
-镜脉 **今日续照**：东八区自然日 `(user_id, insight_date)` 幂等一条；用户当日首次访问时懒生成，**不**扣解读额度。
+镜脉 **今日续照**：东八区自然日 `(user_id, insight_date)` 幂等一条；用户当日首次访问时从 **seed 选档** 拼装写入（打开日零 LLM），**不**扣解读额度。
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -150,8 +150,8 @@ join public.user_membership m on m.user_id = u.id;
 | `user_id` | `uuid` | 外键 → `auth.users(id)`，`ON DELETE CASCADE` |
 | `insight_date` | `date` | 东八区自然日 |
 | `source_report_id` | `uuid` | 外键 → `interpret_saved_report(id)`，`ON DELETE CASCADE`；主素材为 `saved_at` 最新且未过期档案 |
-| `echo_text` | `text` | 回响段 |
-| `shift_text` | `text` | 位移段 |
+| `echo_text` | `text` | 回响段（打开日快照，来自 seed 或降级规则） |
+| `shift_text` | `text` | 位移段（按 `daysSinceSaved` 从 seed 选档快照） |
 | `optional_prompt` | `text` | 可空；若有余力追问 |
 | `created_at` | `timestamptz` | 生成时刻；对应 API `generatedAt` |
 
@@ -160,6 +160,35 @@ join public.user_membership m on m.user_id = u.id;
 **索引**：`(user_id, insight_date desc)`。
 
 **HTTP**：`GET /api/mirror-thread/today`（需登录）；无未过期档案 → **204**；`POST /api/mirror-thread/read` 上报阅读时长（内部日志，不写表）。
+
+---
+
+## `interpret_mirror_thread_seed`
+
+镜脉 **续照 Seed**：autosave 成功后异步预写；**1 档案 : 1 seed**（`report_id` 主键）。打开日 `GET /api/mirror-thread/today` 读 seed 按 `daysSinceSaved` 选档拼装 daily，**不**扣解读额度。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `report_id` | `uuid` | 主键；外键 → `interpret_saved_report(id)`，`ON DELETE CASCADE` |
+| `user_id` | `uuid` | 外键 → `auth.users(id)`，`ON DELETE CASCADE` |
+| `echo_text` | `text` | LLM 智能选的报告原句（`ready` 时非空） |
+| `shift_by_day_offset` | `jsonb` | 键 `"1"`…`"7"` + `"default"`；各档 80–120 字位移短文 |
+| `optional_prompt` | `text` | 可空；若有余力追问 |
+| `status` | `text` | `pending` \| `ready` \| `failed` |
+| `model_id` | `text` | 可空；生成所用模型 |
+| `error_detail` | `text` | 可空；失败原因摘要 |
+| `created_at` | `timestamptz` | 创建时刻 |
+| `updated_at` | `timestamptz` | 更新时刻 |
+
+**索引**：`(user_id, updated_at desc)`。
+
+**补跑策略**（[`server/mirror-thread-seed.ts`](../server/mirror-thread-seed.ts)）：
+
+- **主路径**：`POST /api/archives` 201/200 后 fire-and-forget 异步 LLM（约 12s 超时，不阻塞 HTTP）。
+- **补跑**：`GET /today` 无 seed / `failed` / `pending` 超时 → 同步补跑（3s 超时）。
+- **降级**：补跑仍非 `ready` → 规则 echo + §0.1 兜底 shift → HTTP 200。
+
+**HTTP**：无独立公开端点；`GET /api/auth/me` → `mirrorThreadToday.seedStatus` 只读摘要（当日尚无 daily 时）。
 
 ---
 
