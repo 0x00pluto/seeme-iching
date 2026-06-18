@@ -2,8 +2,11 @@
 name: prd-00001-email-otp-login
 sequence: 1
 description: 以 Supabase 邮箱 6 位 OTP 完全替换魔法链接登录；镜微口吻双屏 UI（6 格输入）；有效 30 分钟、重发 60 秒。
-status: backlog
-created: 2026-05-23T09:16:53Z
+status: partial
+last_accepted_at: 2026-06-18T12:00:00Z
+accepted_commit: f269c1f
+accepted_branch: main
+accepted_scope: all
 ---
 
 # PRD: 邮箱六位镜证登录
@@ -12,7 +15,7 @@ created: 2026-05-23T09:16:53Z
 
 | 属性 | 值 |
 |------|-----|
-| 状态 | backlog |
+| 状态 | 工程：partial（见文末「工程验收状态」章） |
 | 范围 | 登录弹窗、Auth API、Supabase 邮件模板；不含短信/密码登录 |
 | 关联文档 | docs/product-brief.md、docs/backend-best-practices.md、docs/supabase-tables.md、AGENTS.md |
 | UI 参考图 | [login-otp-six-boxes-ui-reference.png](./reference/login-otp-six-boxes-ui-reference.png)（见 [reference/README.md](./reference/README.md)） |
@@ -396,3 +399,54 @@ stateDiagram-v2
 |------|------|
 | 2026-05-23 | 初稿：邮箱 OTP 替换 Magic Link；6 格 UI；有效 30min / 重发 60s；镜微文案定稿表 |
 | 2026-05-23 | 参考图落盘 `specs/prds/reference/login-otp-six-boxes-ui-reference.png` |
+
+---
+
+## 1. 工程验收状态
+
+> 由 `/team:prd-accept` 维护；勿手工编造「通过」。最后更新：2026-06-18T12:00:00Z，main@f269c1f，范围：all。
+
+### 总览
+
+| 项 | 内容 |
+|----|------|
+| 工程状态 | `partial` |
+| 验收判定 | **R0 核心通过**；R1/R2 未纳入本次交付 |
+| 最近验收 | 2026-06-18，main@f269c1f |
+| 摘要 | 邮箱 OTP 双屏 UI、send/verify API、HttpOnly Cookie、410 废弃 session 均已落地；发码 60s 冷却为进程内 Map；无自动化测试 |
+
+### Release 交付
+
+| Release | 状态 | 说明 |
+|---------|------|------|
+| R0 | 通过 | API + LoginDialog + MirrorOtpInput + 双运行时 |
+| R1 | 未实现 | 多实例/分布式发码冷却（仍为 `auth-otp-cooldown.ts` 内存 Map） |
+| R2 | 未实现 | 逐格 a11y 读屏标签 |
+
+### 功能验收清单（Agent 优先读此表）
+
+| ID | 能力摘要 | Release | 状态 | 证据 |
+|----|----------|---------|------|------|
+| A1 | POST send-otp（无 emailRedirectTo） | R0 | 通过 | `server/auth-handlers.ts`、`api/auth/send-otp.ts` |
+| A2 | POST verify-otp + Cookie | R0 | 通过 | `server/auth-handlers.ts`、`server/user-session-cookie.ts` |
+| A3 | 60s 冷却 429 + resendAvailableAt | R0 | 通过 | `server/auth-otp-cooldown.ts`、`src/hooks/use-resend-cooldown.ts` |
+| A4 | POST /api/auth/session → 410 | R0 | 通过 | `handleExchangeSession` |
+| A5 | LoginDialog 6 格 + 镜微文案 | R0 | 通过 | `src/components/auth/LoginDialog.tsx`、`MirrorOtpInput.tsx` |
+| A6 | GET /api/auth/me、logout | R0 | 通过 | `server/auth-handlers.ts`、`api/auth/me.ts` |
+| A7 | 分布式发码冷却 | R1 | 未实现 | 文档已注明 Vercel 多实例限制 |
+| A8 | OTP 自动化测试 | R0 | 部分 | 仓库无 auth 相关 test |
+
+### 未完成与遗留
+
+- Supabase 控制台邮件模板含 `{{ .Token }}`、OTP 1800s 需运维 checklist 人工确认
+- R1 外置冷却存储未做
+
+### 质量检查
+
+| 检查项 | 状态 |
+|--------|------|
+| pnpm run lint | 通过（2026-06-18） |
+| 文档与仓库实现同步 | 通过（product-brief §3/§5） |
+
+---
+统计：通过 6 / 部分 1 / 未实现 2 / 范围外 0

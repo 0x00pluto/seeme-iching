@@ -2,8 +2,11 @@
 name: prd-00002-report-auto-save-retention
 sequence: 2
 description: 观心报告解读流结束后自动云端保存；免费 7 天、有效 standard 会员 180 天保留；移除手动保存，保留分享。
-status: backlog
-created: 2026-05-24T12:20:04Z
+status: accepted
+last_accepted_at: 2026-06-18T12:00:00Z
+accepted_commit: f269c1f
+accepted_branch: main
+accepted_scope: all
 ---
 
 # PRD: 观心报告自动保存与分层保留
@@ -12,7 +15,7 @@ created: 2026-05-24T12:20:04Z
 
 | 属性 | 值 |
 |------|-----|
-| 状态 | backlog |
+| 状态 | 工程：accepted（见文末「工程验收状态」章） |
 | 范围 | 观心档案 `interpret_saved_report`、档案/分享 API、解读页 `Interpretation`；不含镜下 8 轮对话云端化 |
 | 关联文档 | docs/product-brief.md、docs/supabase-tables.md、docs/backend-best-practices.md、docs/supabase-migration-practices.md、AGENTS.md |
 | 父 PRD | 无（依赖已登录会话，见 [prd-00001-email-otp-login.md](./prd-00001-email-otp-login.md)） |
@@ -438,3 +441,55 @@ stateDiagram-v2
 | 2026-05-24 | 修订记录：R0 落地后须同步 docs/product-brief.md §3（自动保存与保留期）、§5 API、supabase-tables.md、AGENTS.md |
 | 2026-05-24 | 产品确认 O1：存量档案统一按 7 天回填 `expires_at` |
 | 2026-05-24 | 产品确认：去掉报告级 `retention_tier`；保留期随 `user_membership` 变化，升级延长既有报告 |
+
+---
+
+## 1. 工程验收状态
+
+> 由 `/team:prd-accept` 维护；勿手工编造「通过」。最后更新：2026-06-18T12:00:00Z，main@f269c1f，范围：all。
+
+### 总览
+
+| 项 | 内容 |
+|----|------|
+| 工程状态 | `accepted` |
+| 验收判定 | **R0 核心通过**；R1 物理删除已预埋 migration |
+| 最近验收 | 2026-06-18，main@f269c1f |
+| 摘要 | autosave upsert、7/180 天 `expires_at`、PATCH 追问/觉察、分享过期校验、解读页无手动保存均已落地 |
+
+### Release 交付
+
+| Release | 状态 | 说明 |
+|---------|------|------|
+| R0 | 通过 | migration + archives-handlers + Interpretation autosave |
+| R1 | 通过 | `purge_expired_interpret_saved_reports` + pg_cron 已在 migration；即将过期 UI 提示已实现 |
+
+### 功能验收清单（Agent 优先读此表）
+
+| ID | 能力摘要 | Release | 状态 | 证据 |
+|----|----------|---------|------|------|
+| B1 | POST /api/archives upsert 201/200 | R0 | 通过 | `server/archives-handlers.ts` |
+| B2 | expires_at 7/180 跟人走 | R0 | 通过 | `supabase/migrations/20260524204325_*`、`server/archive-retention.ts` |
+| B3 | GET 过滤未过期 + expiresAt | R0 | 通过 | `handleArchivesGet` |
+| B4 | PATCH 解读/追问/觉察 | R0 | 通过 | `handleArchivesPatch`、`Interpretation.tsx` |
+| B5 | 移除手动保存 | R0 | 通过 | `Interpretation.tsx` runAutosave |
+| B6 | 分享过期 403/410 | R0 | 通过 | `server/share-handlers.ts` |
+| B7 | 分享不隐式 save | R0 | 通过 | `Interpretation.tsx`、`share-api.ts` |
+| B8 | 会员升级刷新 expires_at | R0 | 通过 | migration 触发器 + RPC |
+| B9 | 过期行物理删除 | R1 | 通过 | migration pg_cron |
+| B10 | 客户端 409 死分支 | R0 | 部分 | `archives-api.ts` 仍保留 ARCHIVE_ALREADY_SAVED 处理（服务端已 upsert） |
+
+### 未完成与遗留
+
+- 远端 Supabase 是否已 `db:migrate` 需部署环境确认
+- 无 archives/retention 自动化测试
+
+### 质量检查
+
+| 检查项 | 状态 |
+|--------|------|
+| pnpm run lint | 通过（2026-06-18） |
+| 文档与仓库实现同步 | 通过（product-brief、supabase-tables） |
+
+---
+统计：通过 9 / 部分 1 / 未实现 0 / 范围外 0

@@ -2,8 +2,11 @@
 name: prd-00003-mirror-thread-daily-insight
 sequence: 3
 description: 镜脉叙事续照——内因驱动每日回访；每条档案明日之约；登录日懒生成只读三段式续照；不扣解读额度。
-status: backlog
-created: 2026-06-18T02:12:47Z
+status: partial
+last_accepted_at: 2026-06-18T12:00:00Z
+accepted_commit: f269c1f
+accepted_branch: main
+accepted_scope: all
 ---
 
 # PRD: 镜脉 · 叙事续照
@@ -12,7 +15,7 @@ created: 2026-06-18T02:12:47Z
 
 | 属性 | 值 |
 |------|-----|
-| 状态 | backlog |
+| 状态 | 工程：partial（见文末「工程验收状态」章） |
 | 范围 | 镜脉续照（明日之约 + 今日续照）、`interpret_mirror_thread_daily`、镜脉 API、landing / history / interpretation UI |
 | 关联文档 | [docs/product-brief.md](../docs/product-brief.md)、[docs/supabase-tables.md](../docs/supabase-tables.md)、[docs/backend-best-practices.md](../docs/backend-best-practices.md)、[docs/supabase-migration-practices.md](../docs/supabase-migration-practices.md)、[AGENTS.md](../../AGENTS.md) |
 | 父 PRD | [prd-00002-report-auto-save-retention.md](./prd-00002-report-auto-save-retention.md)（明日之约依赖 autosave 成功） |
@@ -502,3 +505,57 @@ sequenceDiagram
 |------|------|
 | 2026-06-18 | 初稿：基于 feat-00001-mirror-thread-daily-insight 落盘；内因留存、懒生成、明日之约、R0/R1 Release 切片 |
 | 2026-06-18 | 增补 §0.1 镜微用户语言（文案规范）与各触点定稿表；故事地图 / 功能域引用对齐 |
+
+---
+
+## 1. 工程验收状态
+
+> 由 `/team:prd-accept` 维护；勿手工编造「通过」。最后更新：2026-06-18T12:00:00Z，main@f269c1f，范围：all。
+
+### 总览
+
+| 项 | 内容 |
+|----|------|
+| 工程状态 | `partial` |
+| 验收判定 | **R0 主路径通过**；history 置顶续照、若有余力折叠未做；生成链路已由 PRD-00004 升级 |
+| 最近验收 | 2026-06-18，main@f269c1f |
+| 摘要 | 明日之约、landing 续照 Hero/compact、GET today 幂等、跨日 eligible、POST read 埋点已落地 |
+
+### Release 交付
+
+| Release | 状态 | 说明 |
+|---------|------|------|
+| R0 | 部分 | landing 闭环完整；history 未复用续照；optional 未折叠 |
+| R1 | 部分 | auth/me 摘要已并入（00004）；淡出提示已按产品决策移除（见 00004 验收） |
+
+### 功能验收清单（Agent 优先读此表）
+
+| ID | 能力摘要 | Release | 状态 | 证据 |
+|----|----------|---------|------|------|
+| C1 | interpret_mirror_thread_daily migration | R0 | 通过 | `supabase/migrations/20260618102418_*` |
+| C2 | GET /api/mirror-thread/today 幂等 + 204 | R0 | 通过 | `server/mirror-thread-handlers.ts` |
+| C3 | POST /api/mirror-thread/read 埋点 | R0 | 通过 | `server/mirror-thread-handlers.ts` |
+| C4 | 明日之约 autosave 后展示 | R0 | 通过 | `TomorrowPromiseCard.tsx`、`Interpretation.tsx` |
+| C5 | landing Page1 Hero + Page2 compact | R0 | 通过 | `Home.tsx`、`MirrorThreadInsight.tsx` |
+| C6 | 跨日才展示续照（daysSinceSaved≥1） | R0 | 通过 | `server/mirror-thread-date.ts` `isMirrorThreadEligible`（174f713） |
+| C7 | 不扣解读额度 | R0 | 通过 | mirror-thread 路径无 consume_interpret_quota |
+| C8 | history 顶部续照 | R0 | 未实现 | `Home.tsx` history 态仅 `<History />` |
+| C9 | 若有余力默认折叠 | R0 | 未实现 | `MirrorThreadInsight.tsx` 直接展示 optional |
+| C10 | auth/me mirrorThreadToday 摘要 | R1 | 通过 | `server/mirror-thread-summary.ts` |
+| C11 | 打开日 LLM 位移 | R0 | 范围外 | 已由 PRD-00004 seed 选档取代 |
+
+### 未完成与遗留
+
+- history 态置顶 `MirrorThreadInsight` 待补
+- optionalPrompt 折叠交互待补
+- 无镜脉自动化测试
+
+### 质量检查
+
+| 检查项 | 状态 |
+|--------|------|
+| pnpm run lint | 通过（2026-06-18） |
+| 文档与仓库实现同步 | 通过（product-brief §3） |
+
+---
+统计：通过 7 / 部分 2 / 未实现 2 / 范围外 1

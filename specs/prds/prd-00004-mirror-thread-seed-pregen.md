@@ -2,8 +2,11 @@
 name: prd-00004-mirror-thread-seed-pregen
 sequence: 4
 description: 镜脉续照 v2——autosave 异步结构化 LLM 预写 seed；打开日按 7 档 shift 选档拼装 daily；echo Hero；不扣解读额度。
-status: backlog
-created: 2026-06-18T03:40:49Z
+status: partial
+last_accepted_at: 2026-06-18T12:00:00Z
+accepted_commit: f269c1f
+accepted_branch: main
+accepted_scope: all
 ---
 
 # PRD: 镜脉 · 续照 Seed 预写（触动升级）
@@ -12,7 +15,7 @@ created: 2026-06-18T03:40:49Z
 
 | 属性 | 值 |
 |------|-----|
-| 状态 | backlog |
+| 状态 | 工程：partial（见文末「工程验收状态」章） |
 | 范围 | 镜脉续照生成 v2、`interpret_mirror_thread_seed`、autosave 异步 seed 生成、`GET /api/mirror-thread/today` 选档拼装、续照 UI echo Hero |
 | 关联文档 | [docs/product-brief.md](../docs/product-brief.md)、[docs/supabase-tables.md](../docs/supabase-tables.md)、[docs/backend-best-practices.md](../docs/backend-best-practices.md)、[docs/supabase-migration-practices.md](../docs/supabase-migration-practices.md)、[AGENTS.md](../../AGENTS.md) |
 | 背景 PRD | [prd-00003-mirror-thread-daily-insight.md](./prd-00003-mirror-thread-daily-insight.md)（镜脉 R0 已上线：明日之约 + 今日续照 lazy daily；本 PRD 为 **独立** 续照体系 v2 定义，不修订 00003 正文） |
@@ -598,3 +601,59 @@ sequenceDiagram
 | 日期 | 说明 |
 |------|------|
 | 2026-06-18 | 初稿：镜脉续照 v2；autosave seed 预写 + 7 档 shift 选档；echo Hero；无 prologue；独立 PRD |
+
+---
+
+## 1. 工程验收状态
+
+> 由 `/team:prd-accept` 维护；勿手工编造「通过」。最后更新：2026-06-18T12:00:00Z，main@f269c1f，范围：all。
+
+### 总览
+
+| 项 | 内容 |
+|----|------|
+| 工程状态 | `partial` |
+| 验收判定 | **R0 核心通过**；R1 seedStatus/日志通过；淡出提示已按产品决策移除；运营指标未面板化 |
+| 最近验收 | 2026-06-18，main@f269c1f |
+| 摘要 | seed 表、archives 异步 hook、打开日零 LLM 选档、降级矩阵、echo Hero、跨日 eligible 均已落地 |
+
+### Release 交付
+
+| Release | 状态 | 说明 |
+|---------|------|------|
+| R0 | 通过 | migration + mirror-thread-seed + today 选档 + archives hook |
+| R1 | 部分 | auth/me seedStatus + console 结构化日志；淡出 UI 已移除（f269c1f，与 PRD §0.1 R1 条文不一致） |
+| R2 | 范围外 | prologue / 合体 B 未做 |
+
+### 功能验收清单（Agent 优先读此表）
+
+| ID | 能力摘要 | Release | 状态 | 证据 |
+|----|----------|---------|------|------|
+| D1 | interpret_mirror_thread_seed migration | R0 | 通过 | `supabase/migrations/20260618114640_*` |
+| D2 | autosave fire-and-forget seed | R0 | 通过 | `server/archives-handlers.ts`、`mirror-thread-seed.ts` |
+| D3 | structured LLM + echo 子串校验 | R0 | 通过 | `server/prompts/mirror-thread-seed.ts` |
+| D4 | 7 档 shift 选档 + 打开日零 LLM | R0 | 通过 | `mirror-thread-handlers.ts`、`pickShiftKey` |
+| D5 | pending 3s + 补跑 + 降级 200 | R0 | 通过 | `waitForSeedReady`、`assembleDailyFallback` |
+| D6 | echo Hero UI「你曾照见」 | R0 | 通过 | `MirrorThreadInsight.tsx` |
+| D7 | 跨日 eligible（同日 204） | R0 | 通过 | `isMirrorThreadEligible`（174f713） |
+| D8 | auth/me seedStatus | R1 | 通过 | `mirror-thread-summary.ts`、`auth-api.ts` |
+| D9 | seed/today 结构化日志 | R1 | 部分 | `console.info` JSON 事件，无指标面板 |
+| D10 | P95/ready 率运营指标 | R0/R1 | 部分 | 无压测/看板，仅日志可聚合 |
+| D11 | R1 淡出「保留 N 天」 | R1 | 未实现 | 产品决策移除（f269c1f） |
+| D12 | 不扣解读额度 | R0 | 通过 | 无 consume_interpret_quota |
+
+### 未完成与遗留
+
+- PRD §0.1 R1 淡出提示与当前 UI 不一致，建议产品修订 PRD 或恢复 UI
+- seed ready 率 / today P95 需线上观测验证
+- 无 seed/镜脉自动化测试
+
+### 质量检查
+
+| 检查项 | 状态 |
+|--------|------|
+| pnpm run lint | 通过（2026-06-18） |
+| 文档与仓库实现同步 | 通过（supabase-tables、product-brief、AGENTS.md） |
+
+---
+统计：通过 8 / 部分 2 / 未实现 1 / 范围外 1
