@@ -34,6 +34,8 @@
 | 分享链接创建/撤销 | 已上线 | `POST/DELETE /api/archives/:id/share`；公开 `GET /api/share/:token` |
 | 分享只读页 | 已上线 | [`SharedReportView.tsx`](../src/pages/SharedReportView.tsx)、路由 `/s/:token` |
 | 档案列表与搜索 | 已上线 | Home `history` 态、[`History.tsx`](../src/components/IChing/History.tsx) |
+| **镜脉 · 明日之约** | 已上线 | 解读 autosave 成功后 [`TomorrowPromiseCard`](../src/components/IChing/TomorrowPromiseCard.tsx) |
+| **镜脉 · 今日续照** | 已上线 | 登录后 lazy `GET /api/mirror-thread/today`；[`MirrorThreadInsight`](../src/components/IChing/MirrorThreadInsight.tsx) 置顶 landing/history |
 | 未登录本地档案列表 | **已弱化** | 起卦需登录；历史以登录后云端列表为主 |
 
 ## 4. 核心旅程与前端状态机
@@ -59,7 +61,7 @@ landing → divination → interpretation → history
 
 ## 5. 数据与 API 速查
 
-- **表与 RPC**：[supabase-tables.md](./supabase-tables.md)（`user_membership`、`interpret_usage_daily`、`interpret_saved_report`、`interpret_share_link`、`app_config_kv`）
+- **表与 RPC**：[supabase-tables.md](./supabase-tables.md)（`user_membership`、`interpret_usage_daily`、`interpret_saved_report`、`interpret_mirror_thread_daily`、`interpret_share_link`、`app_config_kv`）
 - **HTTP 与双运行时**：[backend-best-practices.md](./backend-best-practices.md)（Express `server.ts` + Vercel `api/*` 共用 `server/ark-api.ts`）
 - **迁移流程**：[supabase-migration-practices.md](./supabase-migration-practices.md)；`pnpm run db:migrate` 需已 `supabase link`
 
@@ -70,7 +72,7 @@ landing → divination → interpretation → history
 | POST | `/api/auth/send-otp` | 寄送邮箱六位镜证（60s 重发冷却） |
 | POST | `/api/auth/verify-otp` | 验码并建立会话 Cookie |
 | POST | `/api/auth/session` | **已废弃（410）**；原 Magic Link 换 Cookie |
-| GET | `/api/auth/me` | 用户 + `entitlements` |
+| GET | `/api/auth/me` | 用户 + `entitlements` + `mirrorThreadToday` 摘要 |
 | POST | `/api/interpret/stream` | 观心报告 SSE |
 | POST | `/api/interpret/deep-inquiry` | 三条深入问句 |
 | POST | `/api/chat/stream` | 深度对话 SSE |
@@ -79,6 +81,8 @@ landing → divination → interpretation → history
 | DELETE | `/api/archives/:id` | 删除单条 |
 | POST/DELETE | `/api/archives/:id/share` | 创建/撤销分享 |
 | GET | `/api/share/:token` | 公开只读报告 |
+| GET | `/api/mirror-thread/today` | 懒生成当日续照（204 无未过期档案） |
+| POST | `/api/mirror-thread/read` | 续照阅读时长埋点（内部日志） |
 
 ## 6. 已知文档漂移（写 PRD 时勿照搬）
 

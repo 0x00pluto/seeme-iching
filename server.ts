@@ -39,6 +39,10 @@ import {
   handleArchiveSharePost,
   handleShareGet,
 } from "./server/share-handlers.js";
+import {
+  handleMirrorThreadRead,
+  handleMirrorThreadToday,
+} from "./server/mirror-thread-handlers.js";
 import { requireAuth, UNAUTHORIZED_RESPONSE } from "./server/require-auth.js";
 import { appendSessionCookie, appendClearSessionCookie } from "./server/user-session-cookie.js";
 
@@ -147,6 +151,32 @@ async function startServer() {
     const result = await handleShareGet(req.params.token ?? "");
     if (result.cacheControl) {
       res.setHeader("Cache-Control", result.cacheControl);
+    }
+    res.status(result.status).json(result.json);
+  });
+
+  app.get("/api/mirror-thread/today", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const result = await handleMirrorThreadToday(req.headers.cookie);
+    if (result.status === 204) {
+      res.status(204).end();
+      return;
+    }
+    res.status(result.status).json(result.json ?? {});
+  });
+
+  app.post("/api/mirror-thread/read", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const result = await handleMirrorThreadRead(req.headers.cookie, req.body);
+    if (result.status === 204) {
+      res.status(204).end();
+      return;
     }
     res.status(result.status).json(result.json);
   });

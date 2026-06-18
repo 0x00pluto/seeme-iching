@@ -26,6 +26,12 @@ export type Entitlements = {
   archiveRetentionDays: number;
 };
 
+export type MirrorThreadTodaySummary = {
+  enabled: boolean;
+  insightDate?: string;
+  sourceReportExpiresAt?: string;
+};
+
 export type AuthMeResponse = {
   user: AuthUser | null;
   entitlements?: Entitlements | null;
@@ -33,6 +39,8 @@ export type AuthMeResponse = {
   quotaBackendConfigured?: boolean;
   /** 与额度同源：service_role 可写 `interpret_saved_report`；缺省时可用 quotaBackendConfigured */
   archivesBackendConfigured?: boolean;
+  /** R1：镜脉续照摘要，减少无档案用户的无效 GET */
+  mirrorThreadToday?: MirrorThreadTodaySummary;
   error?: string;
   detail?: string;
 };

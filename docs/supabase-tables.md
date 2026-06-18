@@ -140,6 +140,29 @@ join public.user_membership m on m.user_id = u.id;
 
 ---
 
+## `interpret_mirror_thread_daily`
+
+镜脉 **今日续照**：东八区自然日 `(user_id, insight_date)` 幂等一条；用户当日首次访问时懒生成，**不**扣解读额度。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | `uuid` | 主键；默认 `gen_random_uuid()` |
+| `user_id` | `uuid` | 外键 → `auth.users(id)`，`ON DELETE CASCADE` |
+| `insight_date` | `date` | 东八区自然日 |
+| `source_report_id` | `uuid` | 外键 → `interpret_saved_report(id)`，`ON DELETE CASCADE`；主素材为 `saved_at` 最新且未过期档案 |
+| `echo_text` | `text` | 回响段 |
+| `shift_text` | `text` | 位移段 |
+| `optional_prompt` | `text` | 可空；若有余力追问 |
+| `created_at` | `timestamptz` | 生成时刻；对应 API `generatedAt` |
+
+**唯一约束**：`(user_id, insight_date)`。
+
+**索引**：`(user_id, insight_date desc)`。
+
+**HTTP**：`GET /api/mirror-thread/today`（需登录）；无未过期档案 → **204**；`POST /api/mirror-thread/read` 上报阅读时长（内部日志，不写表）。
+
+---
+
 ## `interpret_share_link`
 
 将 **`interpret_saved_report`** 中一条已保存报告映射为 **不可猜测的 `token`**，供访客通过 `GET /api/share/:token` 读取**脱敏快照**（不含 `user_id` / `client_session_id`）；**不能**替代登录后的观心档案列表权限。

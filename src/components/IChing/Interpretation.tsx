@@ -1,6 +1,8 @@
 import { fetchDeepInquiry, InterpretDailyQuotaError, streamInterpret } from "@/lib/ark-client";
 import { normalizeMarkdownTables } from "@/lib/normalize-markdown-report";
 import { HEXAGRAMS, LineType, getBinary, getCuoGuaLines, getHuGuaLines, getZongGuaLines } from "@/lib/iching";
+import { TomorrowPromiseCard } from "@/components/IChing/TomorrowPromiseCard";
+import { daysUntilExpiry } from "@/lib/archive-expiry";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,10 +55,6 @@ interface InterpretationProps {
     interpretation: string;
     deepInquiryQuestions?: string[];
   }) => void | Promise<void | HistoryItem>;
-}
-
-function daysUntilExpiry(expiresAtMs: number): number {
-  return Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 86_400_000));
 }
 
 const SELF_OBSERVATION_QUOTE =
@@ -867,6 +865,9 @@ export const Interpretation: React.FC<InterpretationProps> = ({
             </div>
           </section>
         )}
+        {reportReadyForFollowUp && !fromArchive && effectiveArchiveId && !autosaveFailed ? (
+          <TomorrowPromiseCard className="mt-10" />
+        ) : null}
       </div>
     </div>
   );

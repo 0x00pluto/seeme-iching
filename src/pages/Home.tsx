@@ -1,6 +1,7 @@
 import { Divination } from "@/components/IChing/Divination";
 import { History, HistoryItem } from "@/components/IChing/History";
 import { Interpretation } from "@/components/IChing/Interpretation";
+import { MirrorThreadInsight } from "@/components/IChing/MirrorThreadInsight";
 import { LoginDialog } from "@/components/auth/LoginDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +13,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { clearArchives, fetchArchives, postArchive } from "@/lib/archives-api";
-import { fetchAuthMe, postLogout, type AuthUser, type Entitlements } from "@/lib/auth-api";
+import { fetchAuthMe, postLogout, type AuthUser, type Entitlements, type MirrorThreadTodaySummary } from "@/lib/auth-api";
+import { useMirrorThreadUiState } from "@/hooks/useMirrorThreadUiState";
+import { fetchMirrorThreadToday, type MirrorThreadToday } from "@/lib/mirror-thread-api";
+import { buildContinueQuestion } from "@/lib/mirror-thread-continue";
+import { clearMirrorThreadUiState } from "@/lib/mirror-thread-ui-state";
 import { LineType } from "@/lib/iching";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
@@ -77,6 +82,11 @@ export const Home: React.FC = () => {
   const [selectedArchiveExpiresAt, setSelectedArchiveExpiresAt] = useState<number | undefined>(
     undefined,
   );
+  const [mirrorThreadInsight, setMirrorThreadInsight] = useState<MirrorThreadToday | null>(null);
+  const [mirrorThreadLoading, setMirrorThreadLoading] = useState(false);
+  const [mirrorThreadSummary, setMirrorThreadSummary] = useState<MirrorThreadTodaySummary | null>(
+    null,
+  );
   const canStartDivination = question.trim().length > 0;
 
   const archivesRemote = Boolean(authUser && archivesBackendConfigured);
@@ -126,6 +136,7 @@ export const Home: React.FC = () => {
       const data = await fetchAuthMe();
       setAuthUser(data.user);
       setEntitlements(data.entitlements ?? null);
+      setMirrorThreadSummary(data.mirrorThreadToday ?? null);
       const archivesConfigured = Boolean(
         data.archivesBackendConfigured ?? data.quotaBackendConfigured,
       );
@@ -156,6 +167,8 @@ export const Home: React.FC = () => {
         setArchivesBackendConfigured(undefined);
         setQuotaEntitlementsError(null);
         setHistory([]);
+        setMirrorThreadSummary(null);
+        setMirrorThreadInsight(null);
       }
     } catch {
       setAuthUser(null);
@@ -164,12 +177,46 @@ export const Home: React.FC = () => {
       setArchivesBackendConfigured(undefined);
       setQuotaEntitlementsError(null);
       setHistory([]);
+      setMirrorThreadSummary(null);
+      setMirrorThreadInsight(null);
+    }
+  }, []);
+
+  const loadMirrorThread = useCallback(async (summary: MirrorThreadTodaySummary | null) => {
+    if (summary && !summary.enabled) {
+      setMirrorThreadInsight(null);
+      setMirrorThreadLoading(false);
+      return;
+    }
+    setMirrorThreadLoading(true);
+    try {
+      const insight = await fetchMirrorThreadToday();
+      setMirrorThreadInsight(insight);
+    } catch (e) {
+      setMirrorThreadInsight(null);
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("镜脉暂未能连上") || msg.includes("网络")) {
+        toast.error("镜脉暂未能连上，请稍后再来。");
+      } else {
+        toast.error("续照暂未就绪，你仍可照常起卦。");
+      }
+    } finally {
+      setMirrorThreadLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void refreshAuth();
   }, [refreshAuth]);
+
+  useEffect(() => {
+    if (!authUser || !archivesBackendConfigured) {
+      setMirrorThreadInsight(null);
+      setMirrorThreadLoading(false);
+      return;
+    }
+    void loadMirrorThread(mirrorThreadSummary);
+  }, [authUser, archivesBackendConfigured, mirrorThreadSummary, loadMirrorThread]);
 
   useEffect(() => {
     if (!authUser) setAccountMenuOpen(false);
@@ -242,6 +289,8 @@ export const Home: React.FC = () => {
     setArchivePayload(null);
     setSelectedArchiveItemId(null);
     setSelectedArchiveExpiresAt(undefined);
+    setMirrorThreadInsight(null);
+    setMirrorThreadSummary(null);
     setSavedReportId(null);
     setInterpretClientSessionId(crypto.randomUUID());
     setLines(newLines);
@@ -275,6 +324,59 @@ export const Home: React.FC = () => {
     setState("interpretation");
   };
 
+  const { mode: mirrorThreadUiMode, dismiss: dismissMirrorThread, expand: expandMirrorThread } =
+    useMirrorThreadUiState(authUser?.id, mirrorThreadInsight);
+
+  const handleContinueMirror = useCallback(() => {
+    if (mirrorThreadInsight) {
+      setQuestion(buildContinueQuestion(mirrorThreadInsight));
+    }
+    dismissMirrorThread();
+  }, [mirrorThreadInsight, dismissMirrorThread]);
+
+  const handleStartFreshMirror = useCallback(() => {
+    setQuestion("");
+    dismissMirrorThread();
+  }, [dismissMirrorThread]);
+
+  const mirrorInsightEnabled = Boolean(authUser && archivesBackendConfigured);
+  const showMirrorLoading = mirrorInsightEnabled && mirrorThreadLoading;
+  const showMirrorHero =
+    mirrorInsightEnabled && !mirrorThreadLoading && mirrorThreadInsight && mirrorThreadUiMode === "expanded";
+  const showMirrorStrip =
+    mirrorInsightEnabled && !mirrorThreadLoading && mirrorThreadInsight && mirrorThreadUiMode === "compact";
+  const showMirrorGate = showMirrorHero || showMirrorLoading;
+
+  const mirrorHeroBlock = useMemo(() => {
+    if (!mirrorInsightEnabled) return null;
+    if (showMirrorLoading) {
+      return (
+        <MirrorThreadInsight
+          variant="loading"
+          data={null}
+        />
+      );
+    }
+    if (showMirrorHero && mirrorThreadInsight) {
+      return (
+        <MirrorThreadInsight
+          variant="hero"
+          data={mirrorThreadInsight}
+          onContinue={handleContinueMirror}
+          onStartFresh={handleStartFreshMirror}
+        />
+      );
+    }
+    return null;
+  }, [
+    mirrorInsightEnabled,
+    showMirrorLoading,
+    showMirrorHero,
+    mirrorThreadInsight,
+    handleContinueMirror,
+    handleStartFreshMirror,
+  ]);
+
   const goBack = () => {
     if (state === "divination") setState("landing");
     if (state === "interpretation") {
@@ -298,6 +400,9 @@ export const Home: React.FC = () => {
     setInterpretClientSessionId(null);
     setSelectedArchiveItemId(null);
     setSavedReportId(null);
+    setMirrorThreadInsight(null);
+    setMirrorThreadSummary(null);
+    clearMirrorThreadUiState();
     setHistory([]);
     toast.success("已退出登录");
   };
@@ -544,93 +649,131 @@ export const Home: React.FC = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="max-w-5xl mx-auto py-24 px-8 flex flex-col items-center text-center gap-20"
+              className={cn(
+                "max-w-5xl mx-auto px-8 flex flex-col items-center text-center",
+                showMirrorGate ? "py-8 md:py-12" : "py-16 md:py-20",
+                showMirrorGate ? "gap-8" : "gap-12",
+              )}
             >
-              <div className="flex flex-col gap-8">
+              {showMirrorGate ? (
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
+                  key="mirror-gate"
+                  initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center justify-center gap-4 text-brand font-serif tracking-[0.4em] uppercase"
+                  exit={{ opacity: 0, y: -12 }}
+                  className="flex w-full flex-col items-center"
                 >
-                  <div className="h-px w-8 bg-brand/30" />
-                  <span>以卦为镜 · 观心自省</span>
-                  <div className="h-px w-8 bg-brand/30" />
+                  {mirrorHeroBlock}
                 </motion.div>
-                
-                <h2 className="text-5xl md:text-7xl font-serif font-bold tracking-tight leading-[1.1] text-ink max-w-4xl">
-                  易经非预言之术<br />
-                  而是照见内心模式的明镜
-                </h2>
-                
-                <p className="text-lg md:text-xl text-ink/40 font-serif max-w-2xl mx-auto leading-relaxed italic">
-                  “观乎天文，以察时变；观乎人文，以化成天下”<br />
-                  在这里，卦象是你的投影，AI 是你的回响
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-10 w-full max-w-xl relative">
-                {/* Decorative Mirror Frame */}
-                <div className="absolute -inset-10 border border-ink/5 rounded-[60px] pointer-events-none opacity-50" />
-                
-                <div className="relative group">
-                  <textarea
-                    placeholder="闭目静思，在此输入你当下的困惑或意念..."
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                    className="w-full h-48 p-8 rounded-[40px] border border-ink/10 bg-white/30 backdrop-blur-md focus:outline-none focus:ring-4 focus:ring-brand/5 focus:border-brand/20 transition-all resize-none font-serif text-xl leading-relaxed placeholder:text-ink/10 shadow-2xl shadow-ink/5"
-                  />
-                  <div className="absolute bottom-6 right-8 flex items-center gap-2 text-[10px] text-ink/20 font-serif uppercase tracking-widest pointer-events-none">
-                    <Sparkles size={12} />
-                    <span>意念凝聚</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={startDivination}
-                  disabled={!canStartDivination}
-                  className={cn(
-                    "group relative px-16 py-8 rounded-full bg-ink text-bg font-serif text-2xl font-bold tracking-[0.2em] overflow-hidden transition-all shadow-2xl shadow-ink/20",
-                    canStartDivination
-                      ? "active:scale-95 hover:shadow-brand/20 cursor-pointer"
-                      : "opacity-40 cursor-not-allowed"
-                  )}
+              ) : (
+                <motion.div
+                  key="landing-main"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  className="flex w-full flex-col items-center gap-16 md:gap-20"
                 >
+                  <div className="flex flex-col gap-6">
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center justify-center gap-4 text-brand font-serif tracking-[0.4em] uppercase"
+                    >
+                      <div className="h-px w-8 bg-brand/30" />
+                      <span>以卦为镜 · 观心自省</span>
+                      <div className="h-px w-8 bg-brand/30" />
+                    </motion.div>
+
+                    <h2 className="text-5xl md:text-7xl font-serif font-bold tracking-tight leading-[1.1] text-ink max-w-4xl">
+                      易经非预言之术<br />
+                      而是照见内心模式的明镜
+                    </h2>
+
+                    <p className="text-lg md:text-xl text-ink/40 font-serif max-w-2xl mx-auto leading-relaxed italic">
+                      “观乎天文，以察时变；观乎人文，以化成天下”<br />
+                      在这里，卦象是你的投影，AI 是你的回响
+                    </p>
+                  </div>
+
                   <div
                     className={cn(
-                      "absolute inset-0 bg-gradient-to-r from-brand/0 via-brand/20 to-brand/0 transition-transform duration-1000",
-                      canStartDivination ? "-translate-x-full group-hover:translate-x-full" : "-translate-x-full"
+                      "relative flex w-full max-w-xl flex-col gap-8",
+                      showMirrorStrip ? "pt-2" : "",
                     )}
-                  />
-                  <span className="relative flex items-center justify-center gap-4">
-                    进入镜中
-                    <ChevronRight
-                      size={24}
-                      className={cn(
-                        "opacity-20 transition-transform",
-                        canStartDivination ? "group-hover:translate-x-2" : ""
-                      )}
-                    />
-                  </span>
-                </button>
-              </div>
+                  >
+                    <div className="pointer-events-none absolute -inset-10 rounded-[60px] border border-ink/5 opacity-50" />
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-16 pt-32 border-t border-ink/5 w-full">
-                <div className="flex flex-col gap-4 text-left group">
-                  <div className="text-xs text-brand/40 font-serif tracking-widest uppercase group-hover:text-brand transition-colors">01 · 现状之镜</div>
-                  <h4 className="text-xl font-serif font-bold text-ink/80">观照当下</h4>
-                  <p className="text-sm text-ink/40 font-serif leading-relaxed">通过本卦，客观审视你目前所处的外部环境与事态表象。</p>
-                </div>
-                <div className="flex flex-col gap-4 text-left group">
-                  <div className="text-xs text-brand/40 font-serif tracking-widest uppercase group-hover:text-brand transition-colors">02 · 内心之镜</div>
-                  <h4 className="text-xl font-serif font-bold text-ink/80">洞察动机</h4>
-                  <p className="text-sm text-ink/40 font-serif leading-relaxed">通过互卦，揭示事态核心隐藏的动力，以及你内心深处的真实渴望。</p>
-                </div>
-                <div className="flex flex-col gap-4 text-left group">
-                  <div className="text-xs text-brand/40 font-serif tracking-widest uppercase group-hover:text-brand transition-colors">03 · 通变之道</div>
-                  <h4 className="text-xl font-serif font-bold text-ink/80">心理指引</h4>
-                  <p className="text-sm text-ink/40 font-serif leading-relaxed">结合阴影与视角之镜，由 AI 提供多维度的深度心理分析与行动启发。</p>
-                </div>
-              </div>
+                    {showMirrorStrip ? (
+                      <button
+                        type="button"
+                        onClick={expandMirrorThread}
+                        className="absolute left-1/2 top-[-2.5rem] z-10 -translate-x-1/2 -translate-y-1/2 bg-bg px-3 font-serif text-xs tracking-[0.35em] text-brand transition-colors hover:text-brand/80"
+                      >
+                        查看 · 今日续照
+                      </button>
+                    ) : null}
+
+                    <div className="relative group">
+                      <textarea
+                        placeholder="闭目静思，在此输入你当下的困惑或意念..."
+                        value={question}
+                        onChange={(e) => setQuestion(e.target.value)}
+                        className="w-full h-48 p-8 rounded-[40px] border border-ink/10 bg-white/30 backdrop-blur-md focus:outline-none focus:ring-4 focus:ring-brand/5 focus:border-brand/20 transition-all resize-none font-serif text-xl leading-relaxed placeholder:text-ink/10 shadow-2xl shadow-ink/5"
+                      />
+                      <div className="absolute bottom-6 right-8 flex items-center gap-2 text-[10px] text-ink/20 font-serif uppercase tracking-widest pointer-events-none">
+                        <Sparkles size={12} />
+                        <span>意念凝聚</span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={startDivination}
+                      disabled={!canStartDivination}
+                      className={cn(
+                        "group relative px-16 py-8 rounded-full bg-ink text-bg font-serif text-2xl font-bold tracking-[0.2em] overflow-hidden transition-all shadow-2xl shadow-ink/20",
+                        canStartDivination
+                          ? "active:scale-95 hover:shadow-brand/20 cursor-pointer"
+                          : "opacity-40 cursor-not-allowed"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "absolute inset-0 bg-gradient-to-r from-brand/0 via-brand/20 to-brand/0 transition-transform duration-1000",
+                          canStartDivination ? "-translate-x-full group-hover:translate-x-full" : "-translate-x-full"
+                        )}
+                      />
+                      <span className="relative flex items-center justify-center gap-4">
+                        进入镜中
+                        <ChevronRight
+                          size={24}
+                          className={cn(
+                            "opacity-20 transition-transform",
+                            canStartDivination ? "group-hover:translate-x-2" : ""
+                          )}
+                        />
+                      </span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-16 pt-32 border-t border-ink/5 w-full">
+                    <div className="flex flex-col gap-4 text-left group">
+                      <div className="text-xs text-brand/40 font-serif tracking-widest uppercase group-hover:text-brand transition-colors">01 · 现状之镜</div>
+                      <h4 className="text-xl font-serif font-bold text-ink/80">观照当下</h4>
+                      <p className="text-sm text-ink/40 font-serif leading-relaxed">通过本卦，客观审视你目前所处的外部环境与事态表象。</p>
+                    </div>
+                    <div className="flex flex-col gap-4 text-left group">
+                      <div className="text-xs text-brand/40 font-serif tracking-widest uppercase group-hover:text-brand transition-colors">02 · 内心之镜</div>
+                      <h4 className="text-xl font-serif font-bold text-ink/80">洞察动机</h4>
+                      <p className="text-sm text-ink/40 font-serif leading-relaxed">通过互卦，揭示事态核心隐藏的动力，以及你内心深处的真实渴望。</p>
+                    </div>
+                    <div className="flex flex-col gap-4 text-left group">
+                      <div className="text-xs text-brand/40 font-serif tracking-widest uppercase group-hover:text-brand transition-colors">03 · 通变之道</div>
+                      <h4 className="text-xl font-serif font-bold text-ink/80">心理指引</h4>
+                      <p className="text-sm text-ink/40 font-serif leading-relaxed">结合阴影与视角之镜，由 AI 提供多维度的深度心理分析与行动启发。</p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
             </motion.section>
           )}
 

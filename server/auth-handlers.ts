@@ -3,6 +3,7 @@ import {
   recordSend,
 } from "./auth-otp-cooldown.js";
 import { fetchEntitlementsPayload, isQuotaBackendConfigured } from "./membership-quota.js";
+import { fetchMirrorThreadTodaySummary } from "./mirror-thread-summary.js";
 import { getSupabaseAuthClient } from "./supabase-auth-client.js";
 import {
   encodeUserSessionToken,
@@ -288,7 +289,10 @@ export async function handleMe(cookieHeader: string | undefined): Promise<{
     };
   }
   try {
-    const entitlements = await fetchEntitlementsPayload(session.sub);
+    const [entitlements, mirrorThreadToday] = await Promise.all([
+      fetchEntitlementsPayload(session.sub),
+      fetchMirrorThreadTodaySummary(session.sub),
+    ]);
     return {
       status: 200,
       json: {
@@ -296,6 +300,7 @@ export async function handleMe(cookieHeader: string | undefined): Promise<{
         entitlements,
         quotaBackendConfigured: true,
         archivesBackendConfigured: true,
+        mirrorThreadToday,
       },
     };
   } catch (e) {
