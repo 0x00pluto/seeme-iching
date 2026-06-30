@@ -16,6 +16,7 @@ import {
   buildAbsenceShiftFallback,
   buildOptionalPromptRule,
   buildOvernightShiftFallback,
+  buildReplyAwareShiftFallback,
 } from "./prompts/mirror-thread-shift.js";
 import {
   buildMirrorThreadSeedUserPrompt,
@@ -316,6 +317,31 @@ export async function waitForSeedReady(
   }
 
   return fetchSeedByReportId(reportId);
+}
+
+/** 回笔保存后异步刷新 seed 次日位移档（fire-and-forget；不调用 LLM） */
+export async function refreshSeedShiftForReply(
+  reportId: string,
+  replyText: string,
+): Promise<void> {
+  const seed = await fetchSeedByReportId(reportId);
+  if (!seed || seed.status !== "ready") return;
+
+  const shifts = { ...(seed.shift_by_day_offset ?? {}) };
+  shifts["1"] = buildReplyAwareShiftFallback(replyText);
+
+  const sb = createServerSupabase();
+  const { error } = await sb
+    .from("interpret_mirror_thread_seed")
+    .update({
+      shift_by_day_offset: shifts,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("report_id", reportId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export { ASYNC_TIMEOUT_MS, SYNC_BACKFILL_TIMEOUT_MS };

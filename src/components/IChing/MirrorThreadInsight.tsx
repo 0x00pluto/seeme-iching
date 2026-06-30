@@ -1,7 +1,14 @@
 import type { MirrorThreadToday } from "@/lib/mirror-thread-api";
 import { postMirrorThreadReadBeacon } from "@/lib/mirror-thread-api";
+import {
+  clearMirrorThreadReplyDraft,
+  loadMirrorThreadReplyDraft,
+  saveMirrorThreadReplyDraft,
+} from "@/lib/mirror-thread-reply-draft";
 import { cn } from "@/lib/utils";
-import React, { useEffect, useRef } from "react";
+import { Textarea } from "@/components/ui/textarea";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 export type MirrorThreadInsightVariant = "hero" | "loading";
 
@@ -11,9 +18,16 @@ type MirrorThreadInsightProps = {
   className?: string;
   /** seed pending / 补跑中：展示「镜脉正在续照…」 */
   showPregenHint?: boolean;
+  replyEditable?: boolean;
+  onReplySave?: (replyText: string) => Promise<void>;
   onContinue?: () => void;
   onStartFresh?: () => void;
 };
+
+const REPLY_PLACEHOLDER = "把你此刻的回响留在这里，明日会再照见一笔。";
+const REPLY_TITLE = "若有余力，留一笔";
+const TOAST_SAVED = "已记下。";
+const TOAST_SAVE_FAILED = "暂未记下，请稍后再试。";
 
 function useReadDurationBeacon(data: MirrorThreadToday | null, enabled: boolean) {
   const rootRef = useRef<HTMLElement | null>(null);
@@ -92,6 +106,171 @@ function useReadDurationBeacon(data: MirrorThreadToday | null, enabled: boolean)
   return rootRef;
 }
 
+function ReplySectionLabel() {
+  return (
+    <p className="mb-4 font-serif text-xs uppercase tracking-[0.35em] text-ink/30">
+      {REPLY_TITLE}
+    </p>
+  );
+}
+
+const replyCardClass =
+  "rounded-[32px] border border-ink/5 bg-white/40 p-6 sm:p-8 transition-colors hover:border-brand/15 hover:bg-white/50";
+
+function MirrorThreadReplySection({
+  insightDate,
+  userReply,
+  replyEditable,
+  onReplySave,
+}: {
+  insightDate: string;
+  userReply: string | null | undefined;
+  replyEditable: boolean;
+  onReplySave?: (replyText: string) => Promise<void>;
+}) {
+  const savedText = userReply?.trim() ?? "";
+  const [draft, setDraft] = useState(() => savedText || loadMirrorThreadReplyDraft(insightDate) || "");
+  const [isWriting, setIsWriting] = useState(() => {
+    if (savedText) return false;
+    return Boolean(loadMirrorThreadReplyDraft(insightDate)?.trim());
+  });
+  const lastSavedRef = useRef(savedText);
+  const savingRef = useRef(false);
+
+  useEffect(() => {
+    const next = savedText || loadMirrorThreadReplyDraft(insightDate) || "";
+    setDraft(next);
+    lastSavedRef.current = savedText;
+    if (savedText) {
+      setIsWriting(false);
+    }
+  }, [insightDate, savedText]);
+
+  const persist = useCallback(async () => {
+    if (!replyEditable || !onReplySave || savingRef.current) return;
+    const trimmed = draft.trim();
+    if (trimmed === lastSavedRef.current) return;
+
+    savingRef.current = true;
+    try {
+      await onReplySave(trimmed);
+      lastSavedRef.current = trimmed;
+      clearMirrorThreadReplyDraft(insightDate);
+      if (trimmed) {
+        toast.success(TOAST_SAVED);
+        setIsWriting(false);
+      }
+    } catch {
+      saveMirrorThreadReplyDraft(insightDate, draft);
+      toast.error(TOAST_SAVE_FAILED);
+    } finally {
+      savingRef.current = false;
+    }
+  }, [draft, insightDate, onReplySave, replyEditable]);
+
+  const showReadOnly = !replyEditable && savedText.length > 0;
+  const showEditable = replyEditable && Boolean(onReplySave);
+
+  if (!showReadOnly && !showEditable) {
+    return null;
+  }
+
+  const textareaBlock = (
+    <div className="relative">
+      <Textarea
+        placeholder={REPLY_PLACEHOLDER}
+        value={draft}
+        maxLength={120}
+        rows={3}
+        autoFocus={isWriting && Boolean(savedText)}
+        onChange={(e) => {
+          const next = e.target.value;
+          setDraft(next);
+          saveMirrorThreadReplyDraft(insightDate, next);
+        }}
+        onBlur={() => {
+          void persist();
+        }}
+        className={cn(
+          "min-h-[7rem] w-full resize-y rounded-[28px] border-ink/10 bg-white/30 p-6 font-serif text-lg leading-relaxed",
+          "placeholder:text-ink/10",
+          "focus-visible:border-brand/30 focus-visible:ring-brand/20",
+        )}
+      />
+      <span className="pointer-events-none absolute bottom-4 right-6 text-[10px] font-serif tracking-widest text-ink/20">
+        {draft.length}/120
+      </span>
+    </div>
+  );
+
+  if (showReadOnly) {
+    return (
+      <div className="mx-auto w-full max-w-3xl">
+        <ReplySectionLabel />
+        <div className={replyCardClass}>
+          <blockquote className="border-l-2 border-brand/30 pl-4 font-serif text-lg leading-relaxed text-ink/80">
+            {savedText}
+          </blockquote>
+        </div>
+      </div>
+    );
+  }
+
+  if (savedText && !isWriting) {
+    return (
+      <div className="mx-auto w-full max-w-3xl">
+        <ReplySectionLabel />
+        <div className={replyCardClass}>
+          <blockquote className="border-l-2 border-brand/30 pl-4 font-serif text-lg leading-relaxed text-ink/80">
+            {savedText}
+          </blockquote>
+          <button
+            type="button"
+            onClick={() => setIsWriting(true)}
+            className="mt-4 font-serif text-sm text-ink/40 transition-colors hover:text-ink/60"
+          >
+            改一改
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isWriting) {
+    return (
+      <div className="mx-auto w-full max-w-3xl">
+        <ReplySectionLabel />
+        <div className={replyCardClass}>
+          <p className="mb-4 font-serif text-sm leading-relaxed text-ink/40">
+            {REPLY_PLACEHOLDER}
+          </p>
+          {textareaBlock}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-3xl">
+      <ReplySectionLabel />
+      <button
+        type="button"
+        onClick={() => setIsWriting(true)}
+        className={cn(replyCardClass, "w-full text-left")}
+      >
+        <p className="font-serif text-sm leading-relaxed text-ink/40">{REPLY_PLACEHOLDER}</p>
+        <div
+          className={cn(
+            "mt-4 rounded-[28px] border border-dashed border-ink/10 bg-white/25 px-6 py-4",
+          )}
+        >
+          <span className="font-serif text-base text-ink/20">轻触写下</span>
+        </div>
+      </button>
+    </div>
+  );
+}
+
 function HeroLoading({
   className,
   showPregenHint,
@@ -126,6 +305,8 @@ export const MirrorThreadInsight: React.FC<MirrorThreadInsightProps> = ({
   variant,
   className,
   showPregenHint,
+  replyEditable = false,
+  onReplySave,
   onContinue,
   onStartFresh,
 }) => {
@@ -179,9 +360,17 @@ export const MirrorThreadInsight: React.FC<MirrorThreadInsightProps> = ({
               </p>
             </div>
           ) : null}
+
+          <MirrorThreadReplySection
+            insightDate={data.insightDate}
+            userReply={data.userReply}
+            replyEditable={replyEditable}
+            onReplySave={onReplySave}
+          />
         </div>
 
-        <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-center sm:gap-6">
+        <div className="mt-4 w-full max-w-3xl border-t border-ink/5 pt-10">
+          <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-center sm:gap-6">
           {onContinue ? (
             <button
               type="button"
@@ -200,6 +389,7 @@ export const MirrorThreadInsight: React.FC<MirrorThreadInsightProps> = ({
               开启新的照见
             </button>
           ) : null}
+          </div>
         </div>
       </div>
     </section>

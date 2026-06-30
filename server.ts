@@ -40,7 +40,10 @@ import {
   handleShareGet,
 } from "./server/share-handlers.js";
 import {
+  handleMirrorThreadGetReplies,
+  handleMirrorThreadGetReply,
   handleMirrorThreadRead,
+  handleMirrorThreadReply,
   handleMirrorThreadToday,
 } from "./server/mirror-thread-handlers.js";
 import { requireAuth, UNAUTHORIZED_RESPONSE } from "./server/require-auth.js";
@@ -178,6 +181,42 @@ async function startServer() {
       res.status(204).end();
       return;
     }
+    res.status(result.status).json(result.json);
+  });
+
+  const mirrorThreadReplyHandler = async (
+    req: express.Request,
+    res: express.Response,
+  ): Promise<void> => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const result = await handleMirrorThreadReply(req.headers.cookie, req.body);
+    res.status(result.status).json(result.json);
+  };
+
+  app.put("/api/mirror-thread/reply", mirrorThreadReplyHandler);
+  app.patch("/api/mirror-thread/reply", mirrorThreadReplyHandler);
+
+  app.get("/api/mirror-thread/reply", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const insightDate =
+      typeof req.query.insightDate === "string" ? req.query.insightDate : undefined;
+    const result = await handleMirrorThreadGetReply(req.headers.cookie, insightDate);
+    res.status(result.status).json(result.json);
+  });
+
+  app.get("/api/mirror-thread/replies", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const limit = typeof req.query.limit === "string" ? req.query.limit : undefined;
+    const result = await handleMirrorThreadGetReplies(req.headers.cookie, limit);
     res.status(result.status).json(result.json);
   });
 

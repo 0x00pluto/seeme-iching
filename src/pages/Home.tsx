@@ -15,8 +15,9 @@ import { Input } from "@/components/ui/input";
 import { clearArchives, fetchArchives, postArchive } from "@/lib/archives-api";
 import { fetchAuthMe, postLogout, type AuthUser, type Entitlements, type MirrorThreadTodaySummary } from "@/lib/auth-api";
 import { useMirrorThreadUiState } from "@/hooks/useMirrorThreadUiState";
-import { fetchMirrorThreadToday, type MirrorThreadToday } from "@/lib/mirror-thread-api";
+import { fetchMirrorThreadToday, putMirrorThreadReply, type MirrorThreadToday, type MirrorThreadReplyListItem, fetchMirrorThreadReplies } from "@/lib/mirror-thread-api";
 import { buildContinueQuestion } from "@/lib/mirror-thread-continue";
+import { getInsightDateShanghaiClient } from "@/lib/mirror-thread-date";
 import { clearMirrorThreadUiState } from "@/lib/mirror-thread-ui-state";
 import { LineType } from "@/lib/iching";
 import { cn } from "@/lib/utils";
@@ -87,6 +88,7 @@ export const Home: React.FC = () => {
   const [mirrorThreadSummary, setMirrorThreadSummary] = useState<MirrorThreadTodaySummary | null>(
     null,
   );
+  const [mirrorThreadReplies, setMirrorThreadReplies] = useState<MirrorThreadReplyListItem[]>([]);
   const canStartDivination = question.trim().length > 0;
 
   const archivesRemote = Boolean(authUser && archivesBackendConfigured);
@@ -226,8 +228,16 @@ export const Home: React.FC = () => {
     if (state !== "history") {
       setHistorySearchQuery("");
       setHistorySearchOpen(false);
+      return;
     }
-  }, [state]);
+    if (!authUser || !archivesBackendConfigured) {
+      setMirrorThreadReplies([]);
+      return;
+    }
+    void fetchMirrorThreadReplies(7)
+      .then(setMirrorThreadReplies)
+      .catch(() => setMirrorThreadReplies([]));
+  }, [state, authUser, archivesBackendConfigured]);
 
   const persistArchive = useCallback(
     async (payload: { interpretation: string; deepInquiryQuestions?: string[] }): Promise<HistoryItem> => {
@@ -339,6 +349,35 @@ export const Home: React.FC = () => {
     dismissMirrorThread();
   }, [dismissMirrorThread]);
 
+  const handleReplySave = useCallback(
+    async (replyText: string) => {
+      if (!mirrorThreadInsight) return;
+      const result = await putMirrorThreadReply({
+        replyText,
+        insightDate: mirrorThreadInsight.insightDate,
+      });
+      setMirrorThreadInsight((prev) =>
+        prev
+          ? {
+              ...prev,
+              userReply: result.replyText.trim() ? result.replyText : null,
+            }
+          : prev,
+      );
+      if (state === "history") {
+        void fetchMirrorThreadReplies(7)
+          .then(setMirrorThreadReplies)
+          .catch(() => undefined);
+      }
+    },
+    [mirrorThreadInsight, state],
+  );
+
+  const mirrorReplyEditable = Boolean(
+    mirrorThreadInsight &&
+      mirrorThreadInsight.insightDate === getInsightDateShanghaiClient(),
+  );
+
   const mirrorInsightEnabled = Boolean(authUser && archivesBackendConfigured);
   const showMirrorLoading = mirrorInsightEnabled && mirrorThreadLoading;
   const showMirrorPregenHint =
@@ -368,6 +407,8 @@ export const Home: React.FC = () => {
         <MirrorThreadInsight
           variant="hero"
           data={mirrorThreadInsight}
+          replyEditable={mirrorReplyEditable}
+          onReplySave={handleReplySave}
           onContinue={handleContinueMirror}
           onStartFresh={handleStartFreshMirror}
         />
@@ -380,6 +421,43 @@ export const Home: React.FC = () => {
     showMirrorPregenHint,
     showMirrorHero,
     mirrorThreadInsight,
+    mirrorReplyEditable,
+    handleReplySave,
+    handleContinueMirror,
+    handleStartFreshMirror,
+  ]);
+
+  const historyMirrorBlock = useMemo(() => {
+    if (!mirrorInsightEnabled) return null;
+    if (mirrorThreadLoading) {
+      return (
+        <MirrorThreadInsight
+          variant="loading"
+          data={null}
+          showPregenHint={showMirrorPregenHint}
+          className="mb-12"
+        />
+      );
+    }
+    if (!mirrorThreadInsight) return null;
+    return (
+      <MirrorThreadInsight
+        variant="hero"
+        data={mirrorThreadInsight}
+        className="mb-12"
+        replyEditable={mirrorReplyEditable}
+        onReplySave={handleReplySave}
+        onContinue={handleContinueMirror}
+        onStartFresh={handleStartFreshMirror}
+      />
+    );
+  }, [
+    mirrorInsightEnabled,
+    mirrorThreadLoading,
+    showMirrorPregenHint,
+    mirrorThreadInsight,
+    mirrorReplyEditable,
+    handleReplySave,
     handleContinueMirror,
     handleStartFreshMirror,
   ]);
@@ -857,11 +935,14 @@ export const Home: React.FC = () => {
               exit={{ opacity: 0, y: -20 }}
               className="mx-auto max-w-5xl px-8 py-12"
             >
+              {historyMirrorBlock}
               <History
                 items={filteredHistory}
                 allItemsCount={history.length}
                 deepInquirySavedCount={deepInquirySavedCount}
                 archivesRemote={archivesRemote}
+                mirrorThreadReplies={mirrorThreadReplies}
+                todayInsightDate={mirrorThreadInsight?.insightDate}
                 onSelectItem={handleSelectItem}
                 onClear={clearHistory}
                 onStartCasting={() => setState("landing")}

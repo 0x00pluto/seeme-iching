@@ -41,6 +41,11 @@ export function buildOvernightShiftFallback(echoText: string): string {
   return `隔了一夜，${echoText} 是否多了一层滋味？照见不是为了给答案，而是多一个温柔的停顿。`;
 }
 
+/** 有前日回笔时的规则位移（打开日零 LLM，verbatim 引用用户原话） */
+export function buildReplyAwareShiftFallback(replyText: string): string {
+  return `你昨日留下：「${replyText}」——隔了一夜，这句话是否多了一层滋味？照见不是为了给答案，而是多一个温柔的停顿。`;
+}
+
 /** 若有余力：纯规则苏格拉底式追问（R0 无 LLM） */
 export function buildOptionalPromptRule(echoText: string): string {
   const snippet = echoText.length > 24 ? `${echoText.slice(0, 24)}…` : echoText;

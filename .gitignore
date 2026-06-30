@@ -1,9 +1,60 @@
-.cursor/
+# Dependencies
 node_modules/
-build/
+
+# Build outputs
 dist/
+build/
+out/
+.vercel/
+
+# Test coverage
 coverage/
-.DS_Store
-*.log
+.nyc_output/
+
+# Environment & secrets
 .env*
 !.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE / editors
+.cursor/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+*~
+
+# TypeScript
+*.tsbuildinfo
+
+# Vite
+.vite/
+
+# Tooling cache
+.eslintcache
+.turbo
+.cache/
+.parcel-cache/
+
+# Supabase local (see also supabase/.gitignore)
+supabase/.branches
+supabase/.temp
+
+# Local dev tooling
+.codebase-memory/
+
+.tmp/

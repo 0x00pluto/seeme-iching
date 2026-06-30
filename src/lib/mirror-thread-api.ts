@@ -7,12 +7,25 @@ export type MirrorThreadToday = {
   generatedAt: string;
   sourceReportExpiresAt: string;
   sourceQuestion: string;
+  userReply?: string | null;
 };
 
 export type MirrorThreadReadBeacon = {
   insightDate: string;
   insightReadDurationMs: number;
   generatedAt: string;
+};
+
+export type MirrorThreadReplyResult = {
+  insightDate: string;
+  replyText: string;
+  updatedAt: string;
+};
+
+export type MirrorThreadReplyListItem = {
+  insightDate: string;
+  replyText: string;
+  updatedAt: string;
 };
 
 export async function fetchMirrorThreadToday(): Promise<MirrorThreadToday | null> {
@@ -25,6 +38,43 @@ export async function fetchMirrorThreadToday(): Promise<MirrorThreadToday | null
     throw new Error([data.error, data.detail].filter(Boolean).join("：") || "续照暂未就绪");
   }
   return data;
+}
+
+export async function putMirrorThreadReply(params: {
+  replyText: string;
+  insightDate?: string;
+}): Promise<MirrorThreadReplyResult> {
+  const res = await fetch("/api/mirror-thread/reply", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      replyText: params.replyText,
+      insightDate: params.insightDate,
+    }),
+  });
+  const data = (await res.json()) as MirrorThreadReplyResult & { error?: string; detail?: string };
+  if (!res.ok) {
+    throw new Error([data.error, data.detail].filter(Boolean).join("：") || "回笔保存失败");
+  }
+  return data;
+}
+
+export async function fetchMirrorThreadReplies(
+  limit = 7,
+): Promise<MirrorThreadReplyListItem[]> {
+  const res = await fetch(`/api/mirror-thread/replies?limit=${limit}`, {
+    credentials: "include",
+  });
+  const data = (await res.json()) as {
+    items?: MirrorThreadReplyListItem[];
+    error?: string;
+    detail?: string;
+  };
+  if (!res.ok) {
+    throw new Error([data.error, data.detail].filter(Boolean).join("：") || "回笔列表读取失败");
+  }
+  return data.items ?? [];
 }
 
 export function postMirrorThreadReadBeacon(payload: MirrorThreadReadBeacon): void {

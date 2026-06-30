@@ -8,6 +8,7 @@
 | 00002 | [prd-00002-report-auto-save-retention.md](./prd-00002-report-auto-save-retention.md) | 观心报告自动保存；免费 7 天 / 会员 180 天保留；移除手动保存、保留分享 | accepted |
 | 00003 | [prd-00003-mirror-thread-daily-insight.md](./prd-00003-mirror-thread-daily-insight.md) | 镜脉叙事续照：明日之约 + 今日续照；内因 D1 回访；不扣解读额度 | partial（工程 R0 主路径） |
 | 00004 | [prd-00004-mirror-thread-seed-pregen.md](./prd-00004-mirror-thread-seed-pregen.md) | 镜脉续照 v2：autosave 异步 seed 预写 + 7 档 shift 选档；echo Hero；打开日零 LLM | partial（工程 R0 通过） |
+| 00005 | [prd-00005-mirror-thread-reply.md](./prd-00005-mirror-thread-reply.md) | 镜脉·回笔：续照可选短回应；次日位移 verbatim 照见用户原话；闭合开放环；不扣额度 | backlog |
 
 ## 协作命令
 

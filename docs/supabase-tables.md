@@ -163,6 +163,28 @@ join public.user_membership m on m.user_id = u.id;
 
 ---
 
+## `interpret_mirror_thread_reply`
+
+镜脉 **回笔**：用户对当日续照的可选短回应；东八区自然日 `(user_id, insight_date)` 与 `interpret_mirror_thread_daily` **1:1**；**不**扣解读额度。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | `uuid` | 主键；默认 `gen_random_uuid()` |
+| `user_id` | `uuid` | 外键 → `auth.users(id)`，`ON DELETE CASCADE` |
+| `insight_date` | `date` | 东八区自然日，与 daily 对齐 |
+| `daily_id` | `uuid` | 外键 → `interpret_mirror_thread_daily(id)`，`ON DELETE CASCADE` |
+| `reply_text` | `text` | 用户回笔，≤120 字 |
+| `created_at` | `timestamptz` | 首次创建 |
+| `updated_at` | `timestamptz` | 最后更新 |
+
+**唯一约束**：`(user_id, insight_date)`。
+
+**索引**：`(user_id, insight_date desc)`。
+
+**HTTP**：`PUT/PATCH /api/mirror-thread/reply`（当日可写；空串删除）；`GET /api/mirror-thread/reply?insightDate=`；`GET /api/mirror-thread/replies?limit=`。打开日拼装 daily 时若前日有非空回笔，位移段使用规则模板 verbatim 引用（零 LLM）。
+
+---
+
 ## `interpret_mirror_thread_seed`
 
 镜脉 **续照 Seed**：autosave 成功后异步预写；**1 档案 : 1 seed**（`report_id` 主键）。打开日 `GET /api/mirror-thread/today` 读 seed 按 `daysSinceSaved` 选档拼装 daily，**不**扣解读额度。

@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { LineType, HEXAGRAMS, getBinary } from "@/lib/iching";
+import type { MirrorThreadReplyListItem } from "@/lib/mirror-thread-api";
 import { Hexagram } from "./Hexagram";
 import { BookOpen, ChevronRight, Clock, Trash2 } from "lucide-react";
 import { format } from "date-fns";
@@ -51,6 +52,10 @@ interface HistoryProps {
   deepInquirySavedCount: number;
   /** 为 true 时表示当前已登录且档案服务（Supabase）可用，数据来自云端 */
   archivesRemote?: boolean;
+  /** 近史镜脉留笔（只读）；由父组件 GET /api/mirror-thread/replies */
+  mirrorThreadReplies?: MirrorThreadReplyListItem[];
+  /** 当日续照 insight_date，列表中排除以免与顶部续照卡重复 */
+  todayInsightDate?: string;
   onSelectItem: (item: HistoryItem) => void;
   onClear: () => void;
   onStartCasting?: () => void;
@@ -62,6 +67,8 @@ export const History: React.FC<HistoryProps> = ({
   allItemsCount,
   deepInquirySavedCount,
   archivesRemote = false,
+  mirrorThreadReplies = [],
+  todayInsightDate,
   onSelectItem,
   onClear,
   onStartCasting,
@@ -70,6 +77,14 @@ export const History: React.FC<HistoryProps> = ({
   const sortedItems = useMemo(
     () => [...items].sort((a, b) => b.timestamp - a.timestamp),
     [items]
+  );
+
+  const pastReplies = useMemo(
+    () =>
+      mirrorThreadReplies.filter(
+        (r) => !todayInsightDate || r.insightDate !== todayInsightDate,
+      ),
+    [mirrorThreadReplies, todayInsightDate],
   );
 
   if (allItemsCount === 0) {
@@ -122,6 +137,31 @@ export const History: React.FC<HistoryProps> = ({
 
   return (
     <div className="flex flex-col gap-10">
+      {pastReplies.length > 0 ? (
+        <div className="flex flex-col gap-6">
+          <p className="text-xs font-serif uppercase tracking-[0.25em] text-ink/35">
+            镜脉留笔
+          </p>
+          <div className="flex flex-col gap-4">
+            {pastReplies.map((reply) => (
+              <div
+                key={reply.insightDate}
+                className="rounded-[32px] border border-ink/5 bg-white/40 p-6 sm:p-8"
+              >
+                <p className="mb-3 font-serif text-[10px] uppercase tracking-widest text-ink/25">
+                  {format(new Date(`${reply.insightDate}T12:00:00`), "yyyy年M月d日", {
+                    locale: zhCN,
+                  })}
+                </p>
+                <p className="font-serif text-lg leading-relaxed text-ink/70">
+                  {reply.replyText}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <p className="text-xs font-serif uppercase tracking-[0.25em] text-ink/35">
           观心档案

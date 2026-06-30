@@ -5,12 +5,15 @@ import {
   daysSinceSavedShanghai,
   getInsightDateShanghai,
   isMirrorThreadEligible,
+  previousInsightDate,
 } from "./mirror-thread-date.js";
+import { buildReplyAwareShiftFallback } from "./prompts/mirror-thread-shift.js";
 import {
   assembleDailyFallback,
   assembleDailyFromSeed,
   fetchSeedByReportId,
   generateMirrorThreadSeed,
+  refreshSeedShiftForReply,
   SYNC_BACKFILL_TIMEOUT_MS,
   waitForSeedReady,
   type MirrorThreadSeedRow,
@@ -35,6 +38,16 @@ type DailyRow = {
   created_at: string;
 };
 
+type ReplyRow = {
+  id: string;
+  user_id: string;
+  insight_date: string;
+  daily_id: string;
+  reply_text: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type MirrorThreadTodayJson = {
   sourceReportId: string;
   echoText: string;
@@ -44,9 +57,24 @@ export type MirrorThreadTodayJson = {
   generatedAt: string;
   sourceReportExpiresAt: string;
   sourceQuestion: string;
+  userReply: string | null;
+};
+
+export type MirrorThreadReplyJson = {
+  insightDate: string;
+  replyText: string;
+  updatedAt: string;
+};
+
+export type MirrorThreadReplyListItem = {
+  insightDate: string;
+  replyText: string;
+  updatedAt: string;
 };
 
 const SEED_WAIT_MS = 3_000;
+const MAX_REPLY_LENGTH = 120;
+const DEFAULT_RECENT_REPLIES_LIMIT = 7;
 
 function unauthorized(): { status: number; json: Record<string, unknown> } {
   return { status: 401, json: { error: "未登录" } };
@@ -67,6 +95,7 @@ function rowToJson(
   row: DailyRow,
   sourceExpiresAt: string,
   sourceQuestion: string,
+  userReply: string | null,
 ): MirrorThreadTodayJson {
   return {
     sourceReportId: row.source_report_id,
@@ -77,6 +106,7 @@ function rowToJson(
     generatedAt: row.created_at,
     sourceReportExpiresAt: sourceExpiresAt,
     sourceQuestion,
+    userReply,
   };
 }
 
@@ -126,6 +156,57 @@ async function fetchExistingDaily(userId: string, insightDate: string): Promise<
     throw new Error(error.message);
   }
   return (data as DailyRow | null) ?? null;
+}
+
+async function fetchReplyByDate(
+  userId: string,
+  insightDate: string,
+): Promise<ReplyRow | null> {
+  const sb = createServerSupabase();
+  const { data, error } = await sb
+    .from("interpret_mirror_thread_reply")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("insight_date", insightDate)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  return (data as ReplyRow | null) ?? null;
+}
+
+async function fetchPreviousDayReplyText(
+  userId: string,
+  insightDate: string,
+): Promise<string | null> {
+  const prevDate = previousInsightDate(insightDate);
+  const row = await fetchReplyByDate(userId, prevDate);
+  const text = row?.reply_text?.trim() ?? "";
+  return text.length > 0 ? text : null;
+}
+
+async function fetchRecentReplies(
+  userId: string,
+  limit: number,
+): Promise<MirrorThreadReplyListItem[]> {
+  const sb = createServerSupabase();
+  const { data, error } = await sb
+    .from("interpret_mirror_thread_reply")
+    .select("insight_date, reply_text, updated_at")
+    .eq("user_id", userId)
+    .order("insight_date", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map((row) => ({
+    insightDate: String(row.insight_date),
+    replyText: String(row.reply_text),
+    updatedAt: String(row.updated_at),
+  }));
 }
 
 async function insertDailyRow(row: {
@@ -233,6 +314,14 @@ async function resolveDailyContent(params: {
   return { ...assembled, source: "seed" };
 }
 
+function applyPreviousDayReplyShift(
+  shiftText: string,
+  prevReplyText: string | null,
+): string {
+  if (!prevReplyText) return shiftText;
+  return buildReplyAwareShiftFallback(prevReplyText);
+}
+
 export async function handleMirrorThreadToday(cookieHeader: string | undefined): Promise<{
   status: number;
   json?: Record<string, unknown>;
@@ -254,13 +343,20 @@ export async function handleMirrorThreadToday(cookieHeader: string | undefined):
     }
 
     const daysSinceSaved = daysSinceSavedShanghai(source.saved_at, insightDate);
+    const prevReplyText = await fetchPreviousDayReplyText(session.sub, insightDate);
 
     const existing = await fetchExistingDaily(session.sub, insightDate);
     if (existing) {
       const meta = await fetchSourceReportMeta(existing.source_report_id);
+      const reply = await fetchReplyByDate(session.sub, insightDate);
       return {
         status: 200,
-        json: rowToJson(existing, meta.expiresAt, meta.question),
+        json: rowToJson(
+          existing,
+          meta.expiresAt,
+          meta.question,
+          reply?.reply_text?.trim() || null,
+        ),
       };
     }
 
@@ -270,22 +366,174 @@ export async function handleMirrorThreadToday(cookieHeader: string | undefined):
       userId: session.sub,
     });
 
+    const shiftText = applyPreviousDayReplyShift(content.shiftText, prevReplyText);
+
     const inserted = await insertDailyRow({
       userId: session.sub,
       insightDate,
       sourceReportId: source.id,
       echoText: content.echoText,
-      shiftText: content.shiftText,
+      shiftText,
       optionalPrompt: content.optionalPrompt,
     });
 
+    const reply = await fetchReplyByDate(session.sub, insightDate);
+
     return {
       status: 200,
-      json: rowToJson(inserted, source.expires_at, source.question),
+      json: rowToJson(
+        inserted,
+        source.expires_at,
+        source.question,
+        reply?.reply_text?.trim() || null,
+      ),
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { status: 500, json: { error: "续照生成失败", detail: msg } };
+  }
+}
+
+export async function handleMirrorThreadReply(
+  cookieHeader: string | undefined,
+  body: unknown,
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  const session = getSessionFromRequest(cookieHeader);
+  if (!session) return unauthorized();
+  if (!isQuotaBackendConfigured()) return notConfigured();
+
+  const b = body as { replyText?: unknown; insightDate?: unknown };
+  const today = getInsightDateShanghai();
+  const insightDate = String(b.insightDate ?? today).trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(insightDate)) {
+    return { status: 400, json: { error: "insightDate 无效" } };
+  }
+  if (insightDate !== today) {
+    return { status: 403, json: { error: "仅可编辑当日回笔" } };
+  }
+
+  const replyText = String(b.replyText ?? "");
+  const trimmed = replyText.trim();
+
+  if (trimmed.length > MAX_REPLY_LENGTH) {
+    return { status: 422, json: { error: "回笔超过 120 字" } };
+  }
+
+  try {
+    const daily = await fetchExistingDaily(session.sub, insightDate);
+    if (!daily) {
+      return { status: 409, json: { error: "续照尚未生成" } };
+    }
+
+    const sb = createServerSupabase();
+    const now = new Date().toISOString();
+
+    if (trimmed.length === 0) {
+      await sb
+        .from("interpret_mirror_thread_reply")
+        .delete()
+        .eq("user_id", session.sub)
+        .eq("insight_date", insightDate);
+
+      return {
+        status: 200,
+        json: { insightDate, replyText: "", updatedAt: now },
+      };
+    }
+
+    const { data, error } = await sb
+      .from("interpret_mirror_thread_reply")
+      .upsert(
+        {
+          user_id: session.sub,
+          insight_date: insightDate,
+          daily_id: daily.id,
+          reply_text: trimmed,
+          updated_at: now,
+        },
+        { onConflict: "user_id,insight_date" },
+      )
+      .select("insight_date, reply_text, updated_at")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    void refreshSeedShiftForReply(daily.source_report_id, trimmed).catch((e) => {
+      console.warn(
+        "mirror-thread seed reply refresh error:",
+        e instanceof Error ? e.message : e,
+        daily.source_report_id,
+      );
+    });
+
+    return {
+      status: 200,
+      json: {
+        insightDate: String(data.insight_date),
+        replyText: String(data.reply_text),
+        updatedAt: String(data.updated_at),
+      },
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { status: 500, json: { error: "回笔保存失败", detail: msg } };
+  }
+}
+
+export async function handleMirrorThreadGetReply(
+  cookieHeader: string | undefined,
+  insightDateParam: string | undefined,
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  const session = getSessionFromRequest(cookieHeader);
+  if (!session) return unauthorized();
+  if (!isQuotaBackendConfigured()) return notConfigured();
+
+  const insightDate = String(insightDateParam ?? "").trim();
+  if (!insightDate || !/^\d{4}-\d{2}-\d{2}$/.test(insightDate)) {
+    return { status: 400, json: { error: "insightDate 无效" } };
+  }
+
+  try {
+    const row = await fetchReplyByDate(session.sub, insightDate);
+    if (!row) {
+      return { status: 200, json: { insightDate, replyText: null, updatedAt: null } };
+    }
+    return {
+      status: 200,
+      json: {
+        insightDate: row.insight_date,
+        replyText: row.reply_text,
+        updatedAt: row.updated_at,
+      },
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { status: 500, json: { error: "回笔读取失败", detail: msg } };
+  }
+}
+
+export async function handleMirrorThreadGetReplies(
+  cookieHeader: string | undefined,
+  limitParam: string | undefined,
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  const session = getSessionFromRequest(cookieHeader);
+  if (!session) return unauthorized();
+  if (!isQuotaBackendConfigured()) return notConfigured();
+
+  const parsed = Number(limitParam ?? DEFAULT_RECENT_REPLIES_LIMIT);
+  const limit = Number.isFinite(parsed)
+    ? Math.min(Math.max(1, Math.floor(parsed)), 30)
+    : DEFAULT_RECENT_REPLIES_LIMIT;
+
+  try {
+    const items = await fetchRecentReplies(session.sub, limit);
+    return { status: 200, json: { items } };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { status: 500, json: { error: "回笔列表读取失败", detail: msg } };
   }
 }
 

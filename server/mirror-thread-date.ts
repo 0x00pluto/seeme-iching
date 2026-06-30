@@ -38,3 +38,15 @@ export function daysSinceSavedShanghai(
 export function isMirrorThreadEligible(savedAtIso: string | Date, insightDateYmd?: string): boolean {
   return daysSinceSavedShanghai(savedAtIso, insightDateYmd) >= 1;
 }
+
+/** 东八区日历日加减整天，返回 YYYY-MM-DD */
+export function addDaysToInsightDate(ymd: string, deltaDays: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + deltaDays));
+  return dt.toISOString().slice(0, 10);
+}
+
+/** 前一东八区自然日 */
+export function previousInsightDate(ymd: string): string {
+  return addDaysToInsightDate(ymd, -1);
+}

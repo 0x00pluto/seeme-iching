@@ -36,6 +36,7 @@
 | 档案列表与搜索 | 已上线 | Home `history` 态、[`History.tsx`](../src/components/IChing/History.tsx) |
 | **镜脉 · 明日之约** | 已上线 | 解读 autosave 成功后 [`TomorrowPromiseCard`](../src/components/IChing/TomorrowPromiseCard.tsx) |
 | **镜脉 · 今日续照** | 已上线（v2 seed 预写） | autosave 后异步 seed；打开日 `GET /api/mirror-thread/today` 选档拼装（零 LLM）；[`MirrorThreadInsight`](../src/components/IChing/MirrorThreadInsight.tsx) echo Hero |
+| **镜脉 · 回笔** | 已上线 | 续照下方可选「留一笔」≤120 字；`PUT /api/mirror-thread/reply`；次日位移 verbatim 照见前日回笔；history「镜脉留笔」只读列表 |
 | 未登录本地档案列表 | **已弱化** | 起卦需登录；历史以登录后云端列表为主 |
 
 ## 4. 核心旅程与前端状态机
@@ -61,7 +62,7 @@ landing → divination → interpretation → history
 
 ## 5. 数据与 API 速查
 
-- **表与 RPC**：[supabase-tables.md](./supabase-tables.md)（`user_membership`、`interpret_usage_daily`、`interpret_saved_report`、`interpret_mirror_thread_seed`、`interpret_mirror_thread_daily`、`interpret_share_link`、`app_config_kv`）
+- **表与 RPC**：[supabase-tables.md](./supabase-tables.md)（`user_membership`、`interpret_usage_daily`、`interpret_saved_report`、`interpret_mirror_thread_seed`、`interpret_mirror_thread_daily`、`interpret_mirror_thread_reply`、`interpret_share_link`、`app_config_kv`）
 - **HTTP 与双运行时**：[backend-best-practices.md](./backend-best-practices.md)（Express `server.ts` + Vercel `api/*` 共用 `server/ark-api.ts`）
 - **迁移流程**：[supabase-migration-practices.md](./supabase-migration-practices.md)；`pnpm run db:migrate` 需已 `supabase link`
 
@@ -81,7 +82,10 @@ landing → divination → interpretation → history
 | DELETE | `/api/archives/:id` | 删除单条 |
 | POST/DELETE | `/api/archives/:id/share` | 创建/撤销分享 |
 | GET | `/api/share/:token` | 公开只读报告 |
-| GET | `/api/mirror-thread/today` | 当日续照（seed 选档拼装；204 无未过期档案） |
+| GET | `/api/mirror-thread/today` | 当日续照（seed 选档拼装；含 `userReply`；204 无未过期档案） |
+| PUT/PATCH | `/api/mirror-thread/reply` | 保存/更新/删除当日回笔（≤120 字；须当日 daily 已生成） |
+| GET | `/api/mirror-thread/reply` | 按 `insightDate` 查询单条回笔 |
+| GET | `/api/mirror-thread/replies` | 近史回笔列表（`limit` 默认 7） |
 | POST | `/api/mirror-thread/read` | 续照阅读时长埋点（内部日志） |
 
 ## 6. 已知文档漂移（写 PRD 时勿照搬）
