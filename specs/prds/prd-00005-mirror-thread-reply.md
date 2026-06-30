@@ -2,7 +2,11 @@
 name: prd-00005-mirror-thread-reply
 sequence: 5
 description: 镜脉·回笔——续照可选短回应；次日位移 verbatim 照见用户原话；闭合蔡加尼克开放环；不扣额度、不闸卡。
-status: backlog
+status: partial
+last_accepted_at: 2026-06-30T04:30:00Z
+accepted_commit: f48405f
+accepted_branch: main
+accepted_scope: all
 ---
 
 # PRD: 镜脉 · 回笔
@@ -11,7 +15,7 @@ status: backlog
 
 | 属性 | 值 |
 |------|-----|
-| 状态 | 工程：backlog |
+| 状态 | 工程：partial（见文末「工程验收状态」章） |
 | 范围 | 镜脉回笔、`interpret_mirror_thread_reply`、`PUT/PATCH /api/mirror-thread/reply`、today 前日回笔注入位移、MirrorThreadInsight 回笔 UI |
 | 关联文档 | [docs/product-brief.md](../docs/product-brief.md)、[docs/supabase-tables.md](../docs/supabase-tables.md)、[docs/backend-best-practices.md](../docs/backend-best-practices.md)、[docs/supabase-migration-practices.md](../docs/supabase-migration-practices.md)、[AGENTS.md](../../AGENTS.md) |
 | 背景 PRD | [prd-00003-mirror-thread-daily-insight.md](./prd-00003-mirror-thread-daily-insight.md)（镜脉 R0：只读续照）、[prd-00004-mirror-thread-seed-pregen.md](./prd-00004-mirror-thread-seed-pregen.md)（seed v2 选档拼装） |
@@ -404,22 +408,61 @@ stateDiagram-v2
 
 ---
 
-## 工程验收状态
+## 1. 工程验收状态
 
-> 由 `/team:prd-accept` 维护；实现前为 backlog。
+> 由 `/team:prd-accept` 维护；勿手工编造「通过」。最后更新：2026-06-30T04:30:00Z，main@f48405f，范围：all。
 
 ### 总览
 
 | 项 | 内容 |
 |----|------|
-| 工程状态 | `backlog` |
-| 验收判定 | 待实现 |
-| 摘要 | Feature Spec 与 PRD 已落盘；工程未开始 |
+| 工程状态 | `partial` |
+| 验收判定 | **R0 + R1 核心通过**；UI 入口形态与 PRD「折叠区」表述略有差异；today P95 无自动化压测 |
+| 最近验收 | 2026-06-30，main@f48405f |
+| 代码提交 | f48405f（镜脉回笔全链路：migration、API、前端 UI、R1 seed refresh / history / 草稿） |
+| 摘要 | 读→写→次日照见闭环已落地；双运行时一致；禁用词 grep 零命中；`pnpm run lint` 通过 |
 
 ### Release 交付
 
 | Release | 状态 | 说明 |
 |---------|------|------|
-| R0 | backlog | 待 FEAT-00002-01～09 |
-| R1 | backlog | seed refresh、历史只读 |
-| R2 | backlog | 会员 LLM |
+| R0 | 通过 | migration、PUT reply、today 前日注入 + `userReply`、MirrorThreadInsight UI、文档同步 |
+| R1 | 通过 | `refreshSeedShiftForReply`、history「镜脉留笔」、`localStorage` 草稿 |
+| R2 | 范围外 | 会员 LLM shift on reply 未实现 |
+
+### 功能验收清单（Agent 优先读此表）
+
+| ID | 能力摘要 | Release | 状态 | 证据 |
+|----|----------|---------|------|------|
+| FEAT-00002-01-DB | `interpret_mirror_thread_reply` 表与迁移 | R0 | 通过 | `supabase/migrations/20260630120000_interpret_mirror_thread_reply.sql` |
+| FEAT-00002-02-BE | `PUT/PATCH /api/mirror-thread/reply`（401/403/409/422、空串删除） | R0 | 通过 | `server/mirror-thread-handlers.ts` `handleMirrorThreadReply`；`server.ts`；`api/mirror-thread/reply.ts` |
+| FEAT-00002-03-BE | today 拼装前日回笔位移 verbatim | R0 | 通过 | `applyPreviousDayReplyShift`、`buildReplyAwareShiftFallback`（`server/prompts/mirror-thread-shift.ts`） |
+| FEAT-00002-04-BE | GET today 扩展 `userReply` | R0 | 通过 | `MirrorThreadTodayJson.userReply`；`rowToJson` |
+| FEAT-00002-05-FE | MirrorThreadInsight 回笔 UI（≤120、blur 保存、toast） | R0 | 部分 | `MirrorThreadInsight.tsx` `MirrorThreadReplySection`；实现为邀请卡片+书写态，非 PRD 原文 Collapsible「默认折叠」 |
+| FEAT-00002-06-FE | 跨日只读、错误 toast、不阻断 CTA | R0 | 通过 | `mirrorReplyEditable`（`Home.tsx`）；`showReadOnly`；`TOAST_SAVE_FAILED` |
+| FEAT-00002-07-FE | API client 与 Home 接线 | R0 | 通过 | `src/lib/mirror-thread-api.ts` `putMirrorThreadReply`；`Home.tsx` `handleReplySave` |
+| FEAT-00002-08-BE | 双运行时路由；不扣额度 | R0 | 通过 | `server.ts` + `api/mirror-thread/reply.ts`；镜脉路径无 `consume_interpret_quota` |
+| FEAT-00002-09-DOC | product-brief / supabase-tables / AGENTS | R0 | 通过 | `docs/product-brief.md` §3/§5；`docs/supabase-tables.md`；`AGENTS.md` |
+| R1-01 | 回笔后 seed shift 异步 refresh | R1 | 通过 | `refreshSeedShiftForReply`（`server/mirror-thread-seed.ts`）；`handleMirrorThreadReply` fire-and-forget |
+| R1-02 | history「镜脉留笔」只读列表 | R1 | 通过 | `History.tsx`；`fetchMirrorThreadReplies`；`GET /api/mirror-thread/replies` |
+| R1-03 | 断网 localStorage 草稿 | R1 | 通过 | `src/lib/mirror-thread-reply-draft.ts`；失败时 `saveMirrorThreadReplyDraft` |
+| EXTRA-01 | GET 单条/列表 reply API | R0+ | 通过 | `handleMirrorThreadGetReply` / `GetReplies`；`api/mirror-thread/replies.ts` |
+| EXTRA-02 | 文案禁用词合规 | R0 | 通过 | `src/` grep streak/打卡/连续登录/奖励 等零命中（2026-06-30） |
+| PERF-01 | today P95 < 500ms（有 seed） | R0 | 部分 | 回笔路径仅多 indexed SELECT；**无**自动化 P95 压测证据 |
+
+### 未完成与遗留
+
+- **次日位移 E2E**：前日回笔 → 次日 `shift_text` verbatim 仅有代码路径证据，未在验收日跨日实测（需 D+1 或改库日期验证）。
+- **远端 migration**：迁移文件已合入；各环境是否已 `pnpm run db:migrate` 由部署侧确认。
+- **R2**：会员加长 LLM shift 未排期。
+
+### 质量检查
+
+| 检查项 | 状态 |
+|--------|------|
+| `pnpm run lint` | 通过（2026-06-30，main@f48405f） |
+| 文档与仓库实现同步 | 通过 |
+| 浏览器手测（登录态续照回笔） | 通过（PUT/today/replies、保存 toast、档案置顶续照） |
+
+---
+统计：通过 13 / 部分 2 / 未实现 0 / 范围外 1（R2）
