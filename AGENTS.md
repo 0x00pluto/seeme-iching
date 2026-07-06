@@ -32,6 +32,7 @@
 |------|------|
 | `/team:product-manager` | 撰写 PRD → 落盘 [`specs/prds/`](specs/prds/) |
 | `/team:prd-accept` | 对照代码验收并回写 PRD「工程验收状态」 |
+| `/team:test-enginer` | 真实环境端到端 / UI / 接口验收，派发 subagent 取证，产出判定（不改代码） |
 
 重装或变量说明见 [`docs/team-commands-install.md`](docs/team-commands-install.md)。
 

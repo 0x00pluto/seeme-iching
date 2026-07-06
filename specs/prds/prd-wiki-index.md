@@ -9,7 +9,7 @@
 | 00003 | [prd-00003-mirror-thread-daily-insight.md](./prd-00003-mirror-thread-daily-insight.md) | 镜脉叙事续照：明日之约 + 今日续照；内因 D1 回访；不扣解读额度 | partial（工程 R0 主路径） |
 | 00004 | [prd-00004-mirror-thread-seed-pregen.md](./prd-00004-mirror-thread-seed-pregen.md) | 镜脉续照 v2：autosave 异步 seed 预写 + 7 档 shift 选档；echo Hero；打开日零 LLM | partial（工程 R0 通过） |
 | 00005 | [prd-00005-mirror-thread-reply.md](./prd-00005-mirror-thread-reply.md) | 镜脉·回笔：续照可选短回应；次日位移 verbatim 照见用户原话；闭合开放环；不扣额度 | partial（工程 R0+R1 通过） |
-| 00006 | [prd-00006-phone-otp-login.md](./prd-00006-phone-otp-login.md) | 手机号六位镜证登录：+86 短信 OTP 硬切换替换邮箱；Supabase Send SMS Hook + 阿里云；60s/30min | backlog |
+| 00006 | [prd-00006-phone-otp-login.md](./prd-00006-phone-otp-login.md) | 手机号六位镜证登录：+86 短信 OTP 硬切换替换邮箱；Send SMS Hook + 阿里云；60s/10min（实现） | partial（工程 R0+R1 代码通过） |
 
 ## 协作命令
 

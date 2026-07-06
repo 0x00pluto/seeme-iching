@@ -2,7 +2,11 @@
 name: prd-00006-phone-otp-login
 sequence: 6
 description: 以中国大陆手机号 + 六位短信镜证完全替换邮箱登录；Supabase Phone OTP + Send SMS Hook + 阿里云 Dypnsapi；硬切换无存量迁移。
-status: backlog
+status: partial
+last_accepted_at: 2026-07-06T10:08:00Z
+accepted_commit: a121312
+accepted_branch: main
+accepted_scope: all
 created: 2026-07-06T09:21:42Z
 supersedes: prd-00001-email-otp-login
 ---
@@ -13,7 +17,7 @@ supersedes: prd-00001-email-otp-login
 
 | 属性 | 值 |
 |------|-----|
-| 状态 | `backlog`（工程未启动） |
+| 状态 | 工程：`partial`（见文末「工程验收状态」章）；R0+R1 代码已合入，运维 E2E 与 OTP 有效期文案待对齐 |
 | 范围 | 登录弹窗、Auth API、Send SMS Hook、阿里云短信、Supabase Phone 配置；**完全移除**邮箱 OTP 主路径 |
 | 关联文档 | docs/product-brief.md、docs/backend-best-practices.md、docs/supabase-tables.md、AGENTS.md |
 | 取代 PRD | [prd-00001-email-otp-login.md](./prd-00001-email-otp-login.md)（邮箱镜证，硬切换后不再作为主登录） |
@@ -506,3 +510,69 @@ stateDiagram-v2
 | 日期 | 说明 |
 |------|------|
 | 2026-07-06 | 初稿：手机号 OTP 硬切换替换邮箱；Send SMS Hook + 阿里云；+86 only；60s/30min；取代 prd-00001 |
+
+---
+
+## 1. 工程验收状态
+
+> 由 `/team:prd-accept` 维护；勿手工编造「通过」。最后更新：2026-07-06T10:08:00Z，main@a121312，范围：all。
+
+### 总览
+
+| 项 | 内容 |
+|----|------|
+| 工程状态 | `partial` |
+| 验收判定 | **R0+R1 代码路径通过**；运维侧 Supabase/Hook 配置与真实 +86 全流程 E2E 待人工确认；OTP 有效期实现为 **10 分钟**（与 PRD 正文 30 分钟不一致） |
+| 最近验收 | 2026-07-06，main@a121312 |
+| 代码提交 | 09729c7（手机号 OTP 全链路）；a121312（修复 Hook 阿里云 SDK ESM 导入与 11 位本地号格式） |
+| 摘要 | Phone send/verify、Hook→阿里云、LoginDialog 两屏、会话 `phone`、`me.phoneMasked`、邮箱硬切换、单测与 E2E 清单已落地；`pnpm run lint` / `pnpm test` 通过 |
+
+### Release 交付
+
+| Release | 状态 | 说明 |
+|---------|------|------|
+| R0 | 部分 | 工程代码与文档同步完成；Supabase Dashboard（Phone/Hook/过期秒数）与公网 Hook 可达性、10 次真实收信验码待运维/人工抽检 |
+| R1 | 通过 | `phone`/`hook` 单测（`node:test`+`tsx`）、邮箱死代码清理、`mask-email` 删除、E2E 清单文档 |
+| R2 | 范围外 | 用户协议勾选、外置 KV 冷却、a11y 读屏标签未实现 |
+
+### 功能验收清单（Agent 优先读此表）
+
+| ID | 能力摘要 | Release | 状态 | 证据 |
+|----|----------|---------|------|------|
+| FEAT-00006-01-BE | `signInWithOtp({ phone })` + 60s 冷却 | R0 | 通过 | `server/auth-handlers.ts` `handleSendLoginOtp`；`server/auth-otp-cooldown.ts` |
+| FEAT-00006-02-BE | `verifyOtp({ type:'sms' })` + Cookie `phone` | R0 | 通过 | `server/auth-handlers.ts` `handleVerifyLoginOtp`；`server/user-session-cookie.ts` |
+| FEAT-00006-03-BE | 拒收 `email` body；旧 email Cookie 失效 | R0 | 通过 | `rejectEmailBody`；`parseUserSessionToken` 仅接受 `phone` |
+| FEAT-00006-04-BE | `GET /api/auth/me` 含 `phone`/`phoneMasked` | R0 | 通过 | `handleMe` + `maskChinaMobile`（`server/phone.ts`） |
+| FEAT-00006-05-BE | Send SMS Hook 验签 + 阿里云透传 OTP | R0 | 通过 | `server/supabase-send-sms-hook.ts`；`server/aliyun-sms.ts`；`server/send-sms-hook-handler.ts` |
+| FEAT-00006-06-BE | 双运行时 Hook 路由（raw body） | R0 | 通过 | `server.ts`（`express.raw` 先于 `json`）；`api/hooks/supabase/send-sms.ts` |
+| FEAT-00006-07-FE | LoginDialog +86 两屏、镜微文案 | R0 | 通过 | `src/components/auth/LoginDialog.tsx`；`MirrorOtpInput.tsx` |
+| FEAT-00006-08-FE | `postSendLoginPhone` / `AuthUser.phone` | R0 | 通过 | `src/lib/auth-api.ts`；`src/lib/mask-phone.ts` |
+| FEAT-00006-09-FE | Home 账户菜单脱敏手机号 | R0 | 通过 | `src/pages/Home.tsx` `displayPhone` / `initialFromPhone` |
+| FEAT-00006-10-DOC | brief / AGENTS / `.env.example` | R0 | 通过 | `docs/product-brief.md`；`AGENTS.md`；`.env.example` |
+| FEAT-00006-11-OPS | Supabase Phone + Hook URL + 过期配置 | R0 | 部分 | 代码就绪；Dashboard 启用/Hook 公网 URL/**600s** 需运维确认（PRD 正文仍写 1800s） |
+| FEAT-00006-12-E2E | 真实 +86 发码→收信→登录 ≤2min | R0 | 部分 | 本地曾现 Hook 500（SDK 导入已修）；测试服部署后按 `docs/faqs/phone-otp-login-e2e-checklist.md` 抽检 |
+| FEAT-00006-13-RULE | OTP 有效期 10 分钟（产品变更） | R0 | 部分 | `server/aliyun-sms.ts` `DEFAULT_VALID_MINUTES=10`；UI「十分钟」；**PRD 正文/假设表仍为 30 分钟，待修订** |
+| R1-01 | `server/phone.test.ts` 单测 | R1 | 通过 | `pnpm test` 5 cases |
+| R1-02 | `supabase-send-sms-hook.test.ts` 验签单测 | R1 | 通过 | `pnpm test` 3 cases |
+| R1-03 | 删除邮箱登录死代码 | R1 | 通过 | 无 `postSendLoginEmail`/`mask-email.ts`；grep 登录流无 email |
+| R1-04 | E2E 抽检清单文档 | R1 | 通过 | `docs/faqs/phone-otp-login-e2e-checklist.md` |
+| R1-05 | 测试框架 | R1 | 部分 | 使用 `node --import tsx --test`；PRD R1 曾写 vitest，未引入 vitest 包 |
+
+### 未完成与遗留
+
+- **PRD 漂移**：正文「三十分钟 / 1800s / `ALIYUN_SMS_VALID_MINUTES=30`」与实现 **10 分钟**不一致，建议产品修订 PRD 或回退实现。
+- **运维 checklist**：Supabase Phone Provider、Send SMS Hook HTTPS URL、`SEND_SMS_HOOK_SECRET`、`ALIYUN_*` 需在目标环境逐项勾选（见 E2E 清单前置）。
+- **测试服部署**：Hook 修复（a121312）须部署到 Supabase Hook 指向的公网 origin 后，再复测发码。
+- **R2**：协议勾选、KV 冷却、OTP a11y 未排期。
+
+### 质量检查
+
+| 检查项 | 状态 |
+|--------|------|
+| `pnpm run lint` | 通过（2026-07-06，main@a121312） |
+| `pnpm test` | 通过（8/8，`server/phone.test.ts` + `server/supabase-send-sms-hook.test.ts`） |
+| 文档与仓库实现同步 | 部分（PRD 正文 OTP 时长未同步为 10 分钟） |
+| 浏览器手测（localhost 发码） | 部分（依赖远端 Hook；SDK 修复后本地 Hook+阿里云单测 OK） |
+
+---
+统计：通过 15 / 部分 5 / 未实现 0 / 范围外 1（R2）
