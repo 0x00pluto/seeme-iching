@@ -1,6 +1,17 @@
-import Dypnsapi20170525, { SendSmsVerifyCodeRequest } from "@alicloud/dypnsapi20170525";
+import DypnsapiModule, { SendSmsVerifyCodeRequest } from "@alicloud/dypnsapi20170525";
 
-type DypnsapiConfig = ConstructorParameters<typeof Dypnsapi20170525>[0];
+/** CJS 包经 ESM 加载时 default 嵌套一层，需取 .default 才是 Client 类 */
+const DypnsapiClient = (
+  DypnsapiModule as unknown as {
+    default: new (
+      config: ConstructorParameters<
+        typeof import("@alicloud/dypnsapi20170525").default
+      >[0],
+    ) => InstanceType<typeof import("@alicloud/dypnsapi20170525").default>;
+  }
+).default;
+
+type DypnsapiConfig = ConstructorParameters<typeof DypnsapiClient>[0];
 
 const DEFAULT_SIGN_NAME = "速通互联验证码";
 const DEFAULT_TEMPLATE_CODE = "100001";
@@ -13,8 +24,16 @@ function aliyunDepsReady(): boolean {
   );
 }
 
-function phoneE164ToAliyunNumber(phoneE164: string): string {
-  return phoneE164.replace(/\D/g, "");
+import { parseChinaMobileToE164 } from "./phone.js";
+
+/** Dypnsapi 在 countryCode=86 时 phoneNumber 应为 11 位本地号 */
+function phoneE164ToAliyunLocalNumber(phoneE164: string): string {
+  const e164 = parseChinaMobileToE164(phoneE164) ?? phoneE164;
+  const digits = e164.replace(/\D/g, "");
+  if (digits.startsWith("86") && digits.length === 13) {
+    return digits.slice(2);
+  }
+  return digits;
 }
 
 function getValidMinutes(): number {
@@ -41,14 +60,14 @@ export async function sendSupabaseOtpSms(params: {
   const templateCode = process.env.ALIYUN_SMS_TEMPLATE_CODE?.trim() || DEFAULT_TEMPLATE_CODE;
   const validMinutes = getValidMinutes();
 
-  const client = new Dypnsapi20170525({
+  const client = new DypnsapiClient({
     accessKeyId: process.env.ALIYUN_ACCESS_KEY_ID!.trim(),
     accessKeySecret: process.env.ALIYUN_ACCESS_KEY_SECRET!.trim(),
     endpoint: "dypnsapi.aliyuncs.com",
   } as DypnsapiConfig);
 
   const request = new SendSmsVerifyCodeRequest({
-    phoneNumber: phoneE164ToAliyunNumber(params.phone),
+    phoneNumber: phoneE164ToAliyunLocalNumber(params.phone),
     signName,
     templateCode,
     // 透传 Supabase OTP，与模板变量对齐（非 ##code##）
