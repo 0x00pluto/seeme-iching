@@ -2,7 +2,8 @@
 name: prd-00001-email-otp-login
 sequence: 1
 description: 以 Supabase 邮箱 6 位 OTP 完全替换魔法链接登录；镜微口吻双屏 UI（6 格输入）；有效 30 分钟、重发 60 秒。
-status: partial
+status: superseded
+superseded_by: prd-00006-phone-otp-login
 last_accepted_at: 2026-06-18T12:00:00Z
 accepted_commit: f269c1f
 accepted_branch: main
@@ -11,11 +12,13 @@ accepted_scope: all
 
 # PRD: 邮箱六位镜证登录
 
+> **已被取代**：登录主路径由 [prd-00006-phone-otp-login.md](./prd-00006-phone-otp-login.md) 接管（手机号六位镜证、硬切换、不迁移存量邮箱用户）。本文档保留作历史与邮箱 OTP 工程验收记录。
+
 ## 文首属性
 
 | 属性 | 值 |
 |------|-----|
-| 状态 | 工程：partial（见文末「工程验收状态」章） |
+| 状态 | **superseded**（见 [prd-00006-phone-otp-login.md](./prd-00006-phone-otp-login.md)）；工程历史：partial（见文末「工程验收状态」章） |
 | 范围 | 登录弹窗、Auth API、Supabase 邮件模板；不含短信/密码登录 |
 | 关联文档 | docs/product-brief.md、docs/backend-best-practices.md、docs/supabase-tables.md、AGENTS.md |
 | UI 参考图 | [login-otp-six-boxes-ui-reference.png](./reference/login-otp-six-boxes-ui-reference.png)（见 [reference/README.md](./reference/README.md)） |

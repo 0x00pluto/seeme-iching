@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, ArrowRight, Mail, RefreshCw, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Phone, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -14,14 +14,14 @@ import { cn } from "@/lib/utils";
 import {
   AuthApiError,
   messageForAuthOtpCode,
-  postSendLoginEmail,
+  postSendLoginPhone,
   postVerifyLoginOtp,
 } from "@/lib/auth-api";
-import { maskEmailForDisplay } from "@/lib/mask-email";
+import { isValidChinaMobile, maskPhoneForDisplay } from "@/lib/mask-phone";
 import { useResendCooldown } from "@/hooks/use-resend-cooldown";
 import { MirrorOtpInput } from "@/components/auth/MirrorOtpInput";
 
-type Step = "email" | "code";
+type Step = "phone" | "code";
 
 export interface LoginDialogProps {
   open: boolean;
@@ -29,13 +29,17 @@ export interface LoginDialogProps {
   onLoginSuccess?: () => void;
 }
 
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, "").slice(0, 11);
+}
+
 export const LoginDialog: React.FC<LoginDialogProps> = ({
   open,
   onOpenChange,
   onLoginSuccess,
 }) => {
-  const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState("");
+  const [step, setStep] = useState<Step>("phone");
+  const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -46,8 +50,8 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
   const { secondsLeft, canResend } = useResendCooldown(resendAvailableAt);
 
   const resetLocal = () => {
-    setStep("email");
-    setEmail("");
+    setStep("phone");
+    setPhone("");
     setOtp("");
     setLoading(false);
     setVerifying(false);
@@ -77,20 +81,20 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
   };
 
   const sendOtp = async () => {
-    const normalized = email.trim().toLowerCase();
-    if (!normalized.includes("@")) {
-      toast.error("请输入有效的邮箱地址");
+    const normalized = digitsOnly(phone);
+    if (!isValidChinaMobile(normalized)) {
+      toast.error("请输入有效的手机号");
       return;
     }
 
     setLoading(true);
     try {
-      const result = await postSendLoginEmail(normalized);
-      setEmail(normalized);
+      const result = await postSendLoginPhone(normalized);
+      setPhone(normalized);
       applySendResult(result.resendAvailableAt);
       setStep("code");
       setOtp("");
-      toast.success("镜证已寄至你的邮箱");
+      toast.success("镜证已寄至你的手机");
     } catch (e: unknown) {
       handleSendError(e);
     } finally {
@@ -102,9 +106,9 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
     if (!canResend) return;
     setResending(true);
     try {
-      const result = await postSendLoginEmail(email.trim().toLowerCase());
+      const result = await postSendLoginPhone(phone);
       applySendResult(result.resendAvailableAt);
-      toast.success("镜证已寄至你的邮箱");
+      toast.success("镜证已寄至你的手机");
     } catch (e: unknown) {
       handleSendError(e);
     } finally {
@@ -118,7 +122,7 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
       verifyingRef.current = true;
       setVerifying(true);
       try {
-        await postVerifyLoginOtp(email.trim().toLowerCase(), digits);
+        await postVerifyLoginOtp(phone, digits);
         toast.success("登录成功，欢迎来到镜微");
         onLoginSuccess?.();
         onOpenChange(false);
@@ -135,15 +139,15 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
         setVerifying(false);
       }
     },
-    [email, onLoginSuccess, onOpenChange],
+    [phone, onLoginSuccess, onOpenChange],
   );
 
-  const goBackToEmail = () => {
-    setStep("email");
+  const goBackToPhone = () => {
+    setStep("phone");
     setOtp("");
   };
 
-  const maskedEmail = email ? maskEmailForDisplay(email) : "";
+  const maskedPhone = phone ? maskPhoneForDisplay(phone) : "";
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -158,10 +162,10 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
         )}
       >
         <DialogTitle className="sr-only">
-          {step === "email" ? "开启并同步你的档案" : "照见信中之码"}
+          {step === "phone" ? "开启并同步你的档案" : "照见讯中之码"}
         </DialogTitle>
         <DialogDescription className="sr-only">
-          通过邮箱六位镜证登录镜微。
+          通过手机号六位镜证登录镜微。
         </DialogDescription>
 
         <button
@@ -175,13 +179,13 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
 
         <div className="flex flex-col items-center gap-8 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-ink text-bg shadow-xl">
-            <Mail size={24} aria-hidden />
+            <Phone size={24} aria-hidden />
           </div>
 
           <AnimatePresence mode="wait">
-            {step === "email" ? (
+            {step === "phone" ? (
               <motion.div
-                key="email"
+                key="phone"
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 8 }}
@@ -204,15 +208,20 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
                     void sendOtp();
                   }}
                 >
-                  <Input
-                    type="email"
-                    autoComplete="email"
-                    placeholder="请输入您的邮箱"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={loading}
-                    className="h-auto rounded-full border-ink/10 bg-white/60 py-5 px-8 font-serif text-lg italic shadow-sm placeholder:text-ink/25 md:text-lg"
-                  />
+                  <div className="flex items-center rounded-full border border-ink/10 bg-white/60 py-1 pl-6 pr-2 shadow-sm">
+                    <span className="shrink-0 font-serif text-lg text-ink/50">+86</span>
+                    <Input
+                      type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      placeholder="请输入您的手机号"
+                      value={phone}
+                      onChange={(e) => setPhone(digitsOnly(e.target.value))}
+                      disabled={loading}
+                      maxLength={11}
+                      className="h-auto flex-1 border-0 bg-transparent py-4 font-serif text-lg italic shadow-none placeholder:text-ink/25 focus-visible:ring-0 md:text-lg"
+                    />
+                  </div>
                   <Button
                     type="submit"
                     disabled={loading}
@@ -240,7 +249,7 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
               >
                 <button
                   type="button"
-                  onClick={goBackToEmail}
+                  onClick={goBackToPhone}
                   className="flex items-center gap-1 self-start text-sm font-serif text-ink/40 transition-colors hover:text-ink/70"
                 >
                   <ArrowLeft size={16} aria-hidden />
@@ -249,12 +258,12 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
 
                 <div className="flex flex-col gap-3 px-1">
                   <h3 className="font-serif text-3xl font-bold leading-tight text-ink">
-                    照见信中之码
+                    照见讯中之码
                   </h3>
                   <p className="px-2 font-sans text-sm leading-relaxed text-muted-foreground">
                     我们已向{" "}
-                    <span className="font-medium text-ink/70">{maskedEmail}</span>{" "}
-                    寄出一组六位镜证，请于三十分钟内填入下方。
+                    <span className="font-medium text-ink/70">{maskedPhone}</span>{" "}
+                    寄出一组六位镜证，请于十分钟内填入下方。
                   </p>
                 </div>
 
@@ -263,6 +272,7 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
                   onChange={setOtp}
                   onComplete={(digits) => void verifyOtp(digits)}
                   disabled={verifying}
+                  srLabel="照见讯中之码"
                 />
 
                 {verifying && (
@@ -287,10 +297,10 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={goBackToEmail}
+                    onClick={goBackToPhone}
                     className="text-xs font-serif uppercase tracking-widest text-ink/30 hover:text-ink/50"
                   >
-                    修改邮箱
+                    修改手机号
                   </button>
                 </div>
               </motion.div>

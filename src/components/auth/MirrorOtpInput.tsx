@@ -19,6 +19,7 @@ export interface MirrorOtpInputProps {
   onComplete: (digits: string) => void;
   disabled?: boolean;
   id?: string;
+  srLabel?: string;
 }
 
 export const MirrorOtpInput: React.FC<MirrorOtpInputProps> = ({
@@ -27,6 +28,7 @@ export const MirrorOtpInput: React.FC<MirrorOtpInputProps> = ({
   onComplete,
   disabled,
   id = "mirror-otp",
+  srLabel = "照见讯中之码",
 }) => {
   const lastCompleted = useRef<string | null>(null);
 
@@ -43,7 +45,7 @@ export const MirrorOtpInput: React.FC<MirrorOtpInputProps> = ({
   return (
     <div className="flex flex-col items-center gap-2">
       <label htmlFor={id} className="sr-only">
-        照见信中之码
+        {srLabel}
       </label>
       <InputOTP
         id={id}

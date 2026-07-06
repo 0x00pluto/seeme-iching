@@ -1,6 +1,7 @@
 export type AuthUser = {
   id: string;
-  email: string;
+  phone: string;
+  phoneMasked?: string;
 };
 
 export type EntitlementsInterpret = {
@@ -86,7 +87,7 @@ export function messageForAuthOtpCode(code?: AuthOtpErrorCode, fallback?: string
     case "OTP_RATE_LIMIT":
       return "请稍后再寄送镜证";
     case "OTP_EXPIRED":
-      return "镜证已逾三十分钟，请重新寄送";
+      return "镜证已逾十分钟，请重新寄送";
     case "OTP_INVALID":
       return "镜证有误或已失效，请再照见一次";
     default:
@@ -125,13 +126,13 @@ export async function fetchAuthMe(): Promise<AuthMeResult> {
   throw new Error(data.error ?? "无法获取登录状态");
 }
 
-/** 寄送邮箱六位镜证 */
-export async function postSendLoginEmail(email: string): Promise<SendOtpResult> {
+/** 寄送手机号六位镜证 */
+export async function postSendLoginPhone(phone: string): Promise<SendOtpResult> {
   const res = await fetch("/api/auth/send-otp", {
     method: "POST",
     credentials: "include",
     headers: jsonHeaders,
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ phone }),
   });
   const data = await parseAuthJson<AuthErrorBody & SendOtpResult>(res);
   if (!res.ok) {
@@ -144,12 +145,12 @@ export async function postSendLoginEmail(email: string): Promise<SendOtpResult> 
 }
 
 /** 校验六位镜证并建立会话 */
-export async function postVerifyLoginOtp(email: string, token: string): Promise<VerifyOtpResult> {
+export async function postVerifyLoginOtp(phone: string, token: string): Promise<VerifyOtpResult> {
   const res = await fetch("/api/auth/verify-otp", {
     method: "POST",
     credentials: "include",
     headers: jsonHeaders,
-    body: JSON.stringify({ email, token }),
+    body: JSON.stringify({ phone, token }),
   });
   const data = await parseAuthJson<AuthErrorBody & VerifyOtpResult>(res);
   if (!res.ok) {

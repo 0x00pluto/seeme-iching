@@ -48,12 +48,23 @@ import {
 } from "./server/mirror-thread-handlers.js";
 import { requireAuth, UNAUTHORIZED_RESPONSE } from "./server/require-auth.js";
 import { appendSessionCookie, appendClearSessionCookie } from "./server/user-session-cookie.js";
+import { handleSendSmsHook } from "./server/send-sms-hook-handler.js";
 
 dotenv.config();
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  app.post(
+    "/api/hooks/supabase/send-sms",
+    express.raw({ type: "application/json" }),
+    async (req, res) => {
+      const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(String(req.body ?? ""));
+      const result = await handleSendSmsHook(rawBody, req.headers);
+      res.status(result.status).json(result.json);
+    },
+  );
 
   app.use(express.json());
 

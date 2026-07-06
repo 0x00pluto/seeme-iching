@@ -5,7 +5,7 @@ export const USER_SESSION_COOKIE_NAME = "seeme_user_session";
 
 export type UserSessionPayload = {
   sub: string;
-  email: string;
+  phone: string;
   /** unix seconds */
   exp: number;
 };
@@ -60,7 +60,7 @@ export function parseUserSessionToken(token: string | undefined): UserSessionPay
     const payload = JSON.parse(
       Buffer.from(payloadBase64, "base64url").toString("utf8"),
     ) as UserSessionPayload;
-    if (!payload.email || !payload.sub || typeof payload.exp !== "number") {
+    if (!payload.phone || !payload.sub || typeof payload.exp !== "number") {
       return null;
     }
     if (payload.exp * 1000 <= Date.now()) {

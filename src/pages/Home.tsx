@@ -34,18 +34,18 @@ import {
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-/** 邮箱 @ 前本地部分作为昵称展示（避免整段邮箱形态）；过长截断 */
-function displayNameFromEmail(email: string): string {
-  const local = email.split("@")[0]?.trim() ?? email;
-  return local.length > 12 ? `${local.slice(0, 12)}…` : local;
+/** 头像圆内末位数字 */
+function initialFromPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  const local =
+    digits.startsWith("86") && digits.length === 13 ? digits.slice(2) : digits;
+  const last = local.slice(-1);
+  return last || "?";
 }
 
-/** 头像圆内首字符（支持中文首字） */
-function initialFromEmail(email: string): string {
-  const local = email.split("@")[0]?.trim() ?? "";
-  const ch = [...local][0];
-  if (!ch) return "?";
-  return ch.toLocaleUpperCase("en-US");
+function displayPhone(authUser: AuthUser): string {
+  if (authUser.phoneMasked) return authUser.phoneMasked;
+  return authUser.phone;
 }
 
 type AppState = "landing" | "divination" | "interpretation" | "history";
@@ -587,9 +587,7 @@ export const Home: React.FC = () => {
                   aria-haspopup="dialog"
                   className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-ink font-serif text-sm font-bold text-bg transition-opacity hover:opacity-90"
                 >
-                  {authUser.email
-                    ? initialFromEmail(authUser.email)
-                    : "?"}
+                  {authUser.phone ? initialFromPhone(authUser.phone) : "?"}
                 </button>
               </div>
 
@@ -615,18 +613,14 @@ export const Home: React.FC = () => {
                       className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-ink font-serif text-lg font-bold text-bg"
                       aria-hidden
                     >
-                      {authUser.email
-                        ? initialFromEmail(authUser.email)
-                        : "?"}
+                      {authUser.phone ? initialFromPhone(authUser.phone) : "?"}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-serif text-base font-bold text-ink">
-                        {authUser.email
-                          ? displayNameFromEmail(authUser.email)
-                          : "已登录"}
+                        {authUser.phone ? displayPhone(authUser) : "已登录"}
                       </p>
                       <DialogDescription className="mt-0.5 break-all text-xs text-ink/50">
-                        {authUser.email ?? "—"}
+                        {authUser.phone ? displayPhone(authUser) : "—"}
                       </DialogDescription>
                     </div>
                   </div>
@@ -668,7 +662,7 @@ export const Home: React.FC = () => {
                         <span className="rounded bg-ink/5 px-1 font-mono text-[10px] text-ink/55">
                           SUPABASE_SERVICE_ROLE_KEY
                         </span>
-                        。仅配置邮箱登录（Anon）时不会拉取权益快照，与「尚未解读」无关。
+                        。仅配置手机号登录（Anon）时不会拉取权益快照，与「尚未解读」无关。
                       </p>
                     </div>
                   ) : quotaEntitlementsError ? (

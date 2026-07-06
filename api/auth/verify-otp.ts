@@ -1,6 +1,6 @@
 /**
  * Vercel Serverless：POST /api/auth/verify-otp
- * 校验邮箱六位镜证并写入本站 HttpOnly 会话 Cookie。
+ * 校验手机号六位镜证并写入本站 HttpOnly 会话 Cookie。
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { handleVerifyLoginOtp } from "../../server/auth-handlers.js";

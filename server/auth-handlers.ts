@@ -4,6 +4,7 @@ import {
 } from "./auth-otp-cooldown.js";
 import { fetchEntitlementsPayload, isQuotaBackendConfigured } from "./membership-quota.js";
 import { fetchMirrorThreadTodaySummary } from "./mirror-thread-summary.js";
+import { maskChinaMobile, parseChinaMobileToE164 } from "./phone.js";
 import { getSupabaseAuthClient } from "./supabase-auth-client.js";
 import {
   encodeUserSessionToken,
@@ -21,18 +22,23 @@ export type AuthOtpErrorCode =
   | "OTP_RATE_LIMIT"
   | "SESSION_EXCHANGE_DEPRECATED";
 
-function normalizeEmail(email: unknown): string {
-  return String(email ?? "")
-    .trim()
-    .toLowerCase();
-}
-
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
 function isSixDigitToken(token: string): boolean {
   return /^\d{6}$/.test(token);
+}
+
+function rejectEmailBody(body: unknown): { status: number; json: Record<string, unknown> } | null {
+  if (body && typeof body === "object" && "email" in body && (body as { email?: unknown }).email != null) {
+    return { status: 400, json: { error: "请使用手机号登录" } };
+  }
+  return null;
+}
+
+function parsePhoneFromBody(body: unknown): string | null {
+  const raw = (body as { phone?: string })?.phone;
+  if (raw == null || String(raw).trim() === "") {
+    return null;
+  }
+  return parseChinaMobileToE164(String(raw));
 }
 
 /**
@@ -41,19 +47,19 @@ function isSixDigitToken(token: string): boolean {
  */
 type AuthForOtpHandlers = {
   signInWithOtp(credentials: {
-    email: string;
-    options?: { shouldCreateUser?: boolean; emailRedirectTo?: string };
+    phone: string;
+    options?: { shouldCreateUser?: boolean };
   }): Promise<{ error: { message: string } | null }>;
   verifyOtp(credentials: {
-    email: string;
+    phone: string;
     token: string;
-    type: "email";
+    type: "sms";
   }): Promise<{
     data: { session: { access_token: string } | null };
     error: { message: string } | null;
   }>;
   getUser(jwt: string): Promise<{
-    data: { user: { id: string; email?: string | null } | null };
+    data: { user: { id: string; phone?: string | null } | null };
     error: { message?: string } | null;
   }>;
 };
@@ -86,7 +92,7 @@ function otpErrorMessage(code: AuthOtpErrorCode): string {
     case "OTP_RATE_LIMIT":
       return "请稍后再寄送镜证";
     case "OTP_EXPIRED":
-      return "镜证已逾三十分钟，请重新寄送";
+      return "镜证已逾十分钟，请重新寄送";
     case "OTP_INVALID":
       return "镜证有误或已失效，请再照见一次";
     default:
@@ -95,18 +101,18 @@ function otpErrorMessage(code: AuthOtpErrorCode): string {
 }
 
 function establishSessionFromSupabaseUser(
-  user: { id: string; email: string },
+  user: { id: string; phone: string },
   setCookie: (token: string, maxAgeSeconds: number) => void,
-): { ok: true; user: { id: string; email: string } } {
+): { ok: true; user: { id: string; phone: string } } {
   const ttl = getSessionTtlSeconds();
   const payload: UserSessionPayload = {
     sub: user.id,
-    email: normalizeEmail(user.email),
+    phone: user.phone,
     exp: Math.floor(Date.now() / 1000) + ttl,
   };
   const sessionToken = encodeUserSessionToken(payload);
   setCookie(sessionToken, ttl);
-  return { ok: true, user: { id: payload.sub, email: payload.email } };
+  return { ok: true, user: { id: payload.sub, phone: payload.phone } };
 }
 
 export function getSessionFromRequest(cookieHeader: string | undefined): UserSessionPayload | null {
@@ -114,7 +120,7 @@ export function getSessionFromRequest(cookieHeader: string | undefined): UserSes
   return parseUserSessionToken(raw);
 }
 
-/** 邮箱六位镜证：signInWithOtp，不传 emailRedirectTo */
+/** 手机号六位镜证：signInWithOtp({ phone }) */
 export async function handleSendLoginOtp(
   body: unknown,
 ): Promise<{ status: number; json: Record<string, unknown> }> {
@@ -125,12 +131,15 @@ export async function handleSendLoginOtp(
     };
   }
 
-  const email = normalizeEmail((body as { email?: string })?.email);
-  if (!email || !isValidEmail(email)) {
-    return { status: 400, json: { error: "请输入有效的邮箱地址" } };
+  const emailReject = rejectEmailBody(body);
+  if (emailReject) return emailReject;
+
+  const phone = parsePhoneFromBody(body);
+  if (!phone) {
+    return { status: 400, json: { error: "请输入有效的手机号" } };
   }
 
-  const cooldown = checkSendCooldown(email);
+  const cooldown = checkSendCooldown(phone);
   if (!cooldown.allowed) {
     return {
       status: 429,
@@ -145,7 +154,7 @@ export async function handleSendLoginOtp(
   try {
     const auth = getSupabaseAuthClient().auth as AuthForOtpHandlers;
     const { error } = await auth.signInWithOtp({
-      email,
+      phone,
       options: { shouldCreateUser: true },
     });
     if (error) {
@@ -156,7 +165,7 @@ export async function handleSendLoginOtp(
         json: { error: otpErrorMessage(code), code, detail: error.message },
       };
     }
-    const resendAvailableAt = recordSend(email);
+    const resendAvailableAt = recordSend(phone);
     return { status: 200, json: { ok: true, resendAvailableAt } };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -184,11 +193,14 @@ export async function handleVerifyLoginOtp(
     };
   }
 
-  const email = normalizeEmail((body as { email?: string })?.email);
+  const emailReject = rejectEmailBody(body);
+  if (emailReject) return emailReject;
+
+  const phone = parsePhoneFromBody(body);
   const token = String((body as { token?: string })?.token ?? "").trim();
 
-  if (!email || !isValidEmail(email)) {
-    return { status: 400, json: { error: "请输入有效的邮箱地址" } };
+  if (!phone) {
+    return { status: 400, json: { error: "请输入有效的手机号" } };
   }
   if (!isSixDigitToken(token)) {
     return {
@@ -200,9 +212,9 @@ export async function handleVerifyLoginOtp(
   try {
     const auth = getSupabaseAuthClient().auth as AuthForOtpHandlers;
     const { data, error } = await auth.verifyOtp({
-      email,
+      phone,
       token,
-      type: "email",
+      type: "sms",
     });
 
     if (error) {
@@ -222,7 +234,7 @@ export async function handleVerifyLoginOtp(
     }
 
     const { data: userData, error: userError } = await auth.getUser(accessToken);
-    if (userError || !userData.user?.id || !userData.user.email) {
+    if (userError || !userData.user?.id || !userData.user.phone) {
       const code = userError?.message
         ? classifySupabaseAuthError(userError.message)
         : "OTP_INVALID";
@@ -237,7 +249,7 @@ export async function handleVerifyLoginOtp(
     }
 
     const session = establishSessionFromSupabaseUser(
-      { id: userData.user.id, email: userData.user.email },
+      { id: userData.user.id, phone: userData.user.phone },
       setCookie,
     );
     return { status: 200, json: { ok: true, user: session.user } };
@@ -255,7 +267,7 @@ export async function handleExchangeSession(
   return {
     status: 410,
     json: {
-      error: "魔法链接登录已停用，请使用邮箱六位镜证登录",
+      error: "魔法链接登录已停用，请使用手机号六位镜证登录",
       code: "SESSION_EXCHANGE_DEPRECATED",
     },
   };
@@ -276,7 +288,8 @@ export async function handleMe(cookieHeader: string | undefined): Promise<{
   if (!session) {
     return { status: 200, json: { user: null } };
   }
-  const base = { user: { id: session.sub, email: session.email } };
+  const phoneMasked = maskChinaMobile(session.phone);
+  const base = { user: { id: session.sub, phone: session.phone, phoneMasked } };
   if (!isQuotaBackendConfigured()) {
     return {
       status: 200,
