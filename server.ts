@@ -44,6 +44,8 @@ import {
   handleMirrorThreadGetReply,
   handleMirrorThreadRead,
   handleMirrorThreadReply,
+  handleMirrorThreadSurface,
+  handleMirrorThreadSurfaceOpen,
   handleMirrorThreadToday,
 } from "./server/mirror-thread-handlers.js";
 import { requireAuth, UNAUTHORIZED_RESPONSE } from "./server/require-auth.js";
@@ -228,6 +230,28 @@ async function startServer() {
     }
     const limit = typeof req.query.limit === "string" ? req.query.limit : undefined;
     const result = await handleMirrorThreadGetReplies(req.headers.cookie, limit);
+    res.status(result.status).json(result.json);
+  });
+
+  app.get("/api/mirror-thread/surface", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const result = await handleMirrorThreadSurface(req.headers.cookie);
+    res.status(result.status).json(result.json);
+  });
+
+  app.post("/api/mirror-thread/surface-open", async (req, res) => {
+    if (!requireAuth(req.headers.cookie)) {
+      res.status(UNAUTHORIZED_RESPONSE.status).json(UNAUTHORIZED_RESPONSE.body);
+      return;
+    }
+    const result = await handleMirrorThreadSurfaceOpen(req.headers.cookie, req.body);
+    if (result.status === 204) {
+      res.status(204).end();
+      return;
+    }
     res.status(result.status).json(result.json);
   });
 

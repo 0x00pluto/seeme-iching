@@ -1,6 +1,7 @@
 import { Divination } from "@/components/IChing/Divination";
 import { History, HistoryItem } from "@/components/IChing/History";
 import { Interpretation } from "@/components/IChing/Interpretation";
+import { MirrorSurfaceEmptyWhisper, MirrorSurfaceWhisper } from "@/components/IChing/MirrorSurfaceCard";
 import { MirrorThreadInsight } from "@/components/IChing/MirrorThreadInsight";
 import { LoginDialog } from "@/components/auth/LoginDialog";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,17 @@ import { Input } from "@/components/ui/input";
 import { clearArchives, fetchArchives, postArchive } from "@/lib/archives-api";
 import { fetchAuthMe, postLogout, type AuthUser, type Entitlements, type MirrorThreadTodaySummary } from "@/lib/auth-api";
 import { useMirrorThreadUiState } from "@/hooks/useMirrorThreadUiState";
-import { fetchMirrorThreadToday, putMirrorThreadReply, type MirrorThreadToday, type MirrorThreadReplyListItem, fetchMirrorThreadReplies } from "@/lib/mirror-thread-api";
+import {
+  fetchMirrorThreadToday,
+  fetchMirrorThreadSurface,
+  postMirrorSurfaceOpenBeacon,
+  putMirrorThreadReply,
+  type MirrorThreadToday,
+  type MirrorThreadReplyListItem,
+  type MirrorThreadSurface,
+  type MirrorSurfaceKind,
+  fetchMirrorThreadReplies,
+} from "@/lib/mirror-thread-api";
 import { buildContinueQuestion } from "@/lib/mirror-thread-continue";
 import { getInsightDateShanghaiClient } from "@/lib/mirror-thread-date";
 import { clearMirrorThreadUiState } from "@/lib/mirror-thread-ui-state";
@@ -31,7 +42,7 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 /** 头像圆内末位数字 */
@@ -89,6 +100,11 @@ export const Home: React.FC = () => {
     null,
   );
   const [mirrorThreadReplies, setMirrorThreadReplies] = useState<MirrorThreadReplyListItem[]>([]);
+  const [mirrorSurface, setMirrorSurface] = useState<MirrorThreadSurface | null>(null);
+  const [mirrorSurfaceLoading, setMirrorSurfaceLoading] = useState(false);
+  const surfaceKindRef = useRef<MirrorSurfaceKind | null>(null);
+  const escalatedToInterpretRef = useRef(false);
+  const surfaceBeaconSentRef = useRef(false);
   const canStartDivination = question.trim().length > 0;
 
   const archivesRemote = Boolean(authUser && archivesBackendConfigured);
@@ -171,6 +187,7 @@ export const Home: React.FC = () => {
         setHistory([]);
         setMirrorThreadSummary(null);
         setMirrorThreadInsight(null);
+        setMirrorSurface(null);
       }
     } catch {
       setAuthUser(null);
@@ -181,19 +198,47 @@ export const Home: React.FC = () => {
       setHistory([]);
       setMirrorThreadSummary(null);
       setMirrorThreadInsight(null);
+      setMirrorSurface(null);
     }
   }, []);
 
+  const loadMirrorSurface = useCallback(async () => {
+    if (!archivesBackendConfigured) {
+      setMirrorSurface(null);
+      setMirrorSurfaceLoading(false);
+      return;
+    }
+    setMirrorSurfaceLoading(true);
+    try {
+      const surface = await fetchMirrorThreadSurface();
+      setMirrorSurface(surface);
+    } catch (e) {
+      console.error("fetchMirrorThreadSurface", e);
+      setMirrorSurface(null);
+    } finally {
+      setMirrorSurfaceLoading(false);
+    }
+  }, [archivesBackendConfigured]);
+
   const loadMirrorThread = useCallback(async (summary: MirrorThreadTodaySummary | null) => {
+    // enabled:false = 当日续照不可用（如档案过新未达资格），仍应拉取打开面摘要/空态
     if (summary && !summary.enabled) {
       setMirrorThreadInsight(null);
       setMirrorThreadLoading(false);
+      await loadMirrorSurface();
       return;
     }
     setMirrorThreadLoading(true);
+    setMirrorSurface(null);
     try {
       const insight = await fetchMirrorThreadToday();
       setMirrorThreadInsight(insight);
+      if (!insight) {
+        await loadMirrorSurface();
+      } else {
+        setMirrorSurface(null);
+        setMirrorSurfaceLoading(false);
+      }
     } catch (e) {
       setMirrorThreadInsight(null);
       const msg = e instanceof Error ? e.message : String(e);
@@ -202,10 +247,11 @@ export const Home: React.FC = () => {
       } else {
         toast.error("续照暂未就绪，你仍可照常起卦。");
       }
+      await loadMirrorSurface();
     } finally {
       setMirrorThreadLoading(false);
     }
-  }, []);
+  }, [loadMirrorSurface]);
 
   useEffect(() => {
     void refreshAuth();
@@ -215,6 +261,8 @@ export const Home: React.FC = () => {
     if (!authUser || !archivesBackendConfigured) {
       setMirrorThreadInsight(null);
       setMirrorThreadLoading(false);
+      setMirrorSurface(null);
+      setMirrorSurfaceLoading(false);
       return;
     }
     void loadMirrorThread(mirrorThreadSummary);
@@ -301,6 +349,7 @@ export const Home: React.FC = () => {
     setSelectedArchiveExpiresAt(undefined);
     setMirrorThreadInsight(null);
     setMirrorThreadSummary(null);
+    setMirrorSurface(null);
     setSavedReportId(null);
     setInterpretClientSessionId(crypto.randomUUID());
     setLines(newLines);
@@ -316,6 +365,7 @@ export const Home: React.FC = () => {
       setLoginOpen(true);
       return;
     }
+    escalatedToInterpretRef.current = true;
     setState("divination");
   };
 
@@ -391,6 +441,70 @@ export const Home: React.FC = () => {
     mirrorInsightEnabled && !mirrorThreadLoading && mirrorThreadInsight && mirrorThreadUiMode === "compact";
   const showMirrorGate = showMirrorHero || showMirrorLoading;
 
+  const showSurfaceSummary =
+    mirrorInsightEnabled &&
+    !mirrorThreadLoading &&
+    !mirrorSurfaceLoading &&
+    !mirrorThreadInsight &&
+    Boolean(mirrorSurface && !mirrorSurface.empty);
+
+  const showSurfaceEmpty =
+    mirrorInsightEnabled &&
+    !mirrorThreadLoading &&
+    !mirrorSurfaceLoading &&
+    !mirrorThreadInsight &&
+    mirrorSurface?.empty === true;
+
+  const flushSurfaceBeacon = useCallback(() => {
+    const kind = surfaceKindRef.current;
+    if (!kind || surfaceBeaconSentRef.current) return;
+    surfaceBeaconSentRef.current = true;
+    postMirrorSurfaceOpenBeacon({
+      surface: kind,
+      escalatedToInterpret: escalatedToInterpretRef.current,
+    });
+  }, []);
+
+  useEffect(() => {
+    let kind: MirrorSurfaceKind | null = null;
+    if (mirrorInsightEnabled && !mirrorThreadLoading && mirrorThreadInsight) {
+      kind = "insight";
+    } else if (showSurfaceSummary) {
+      kind = "summary";
+    } else if (showSurfaceEmpty) {
+      kind = "empty";
+    }
+
+    if (kind !== surfaceKindRef.current) {
+      if (surfaceKindRef.current && !surfaceBeaconSentRef.current) {
+        flushSurfaceBeacon();
+      }
+      surfaceKindRef.current = kind;
+      surfaceBeaconSentRef.current = false;
+      escalatedToInterpretRef.current = false;
+    }
+  }, [
+    mirrorInsightEnabled,
+    mirrorThreadLoading,
+    mirrorThreadInsight,
+    showSurfaceSummary,
+    showSurfaceEmpty,
+    flushSurfaceBeacon,
+  ]);
+
+  useEffect(() => {
+    if (state !== "landing") {
+      flushSurfaceBeacon();
+      return;
+    }
+    const onPageHide = () => flushSurfaceBeacon();
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      flushSurfaceBeacon();
+    };
+  }, [state, flushSurfaceBeacon]);
+
   const mirrorHeroBlock = useMemo(() => {
     if (!mirrorInsightEnabled) return null;
     if (showMirrorLoading) {
@@ -439,6 +553,7 @@ export const Home: React.FC = () => {
         />
       );
     }
+    // 无续照时不挂卦脉摘要卡：列表本身即足迹，避免与档案条目复读
     if (!mirrorThreadInsight) return null;
     return (
       <MirrorThreadInsight
@@ -487,6 +602,7 @@ export const Home: React.FC = () => {
     setSavedReportId(null);
     setMirrorThreadInsight(null);
     setMirrorThreadSummary(null);
+    setMirrorSurface(null);
     clearMirrorThreadUiState();
     setHistory([]);
     toast.success("已退出登录");
@@ -777,7 +893,7 @@ export const Home: React.FC = () => {
                   <div
                     className={cn(
                       "relative flex w-full max-w-xl flex-col gap-8",
-                      showMirrorStrip ? "pt-2" : "",
+                      showMirrorStrip || showSurfaceSummary || showSurfaceEmpty ? "pt-2" : "",
                     )}
                   >
                     <div className="pointer-events-none absolute -inset-10 rounded-[60px] border border-ink/5 opacity-50" />
@@ -792,8 +908,24 @@ export const Home: React.FC = () => {
                       </button>
                     ) : null}
 
+                    {!showMirrorStrip && showSurfaceSummary && mirrorSurface ? (
+                      <div className="absolute left-1/2 top-[-2.5rem] z-10 -translate-x-1/2 -translate-y-1/2">
+                        <MirrorSurfaceWhisper
+                          items={mirrorSurface.items}
+                          onOpenArchives={() => setState("history")}
+                        />
+                      </div>
+                    ) : null}
+
+                    {!showMirrorStrip && showSurfaceEmpty ? (
+                      <div className="absolute left-1/2 top-[-2.5rem] z-10 w-max max-w-[90vw] -translate-x-1/2 -translate-y-1/2">
+                        <MirrorSurfaceEmptyWhisper />
+                      </div>
+                    ) : null}
+
                     <div className="relative group">
                       <textarea
+                        id="mirror-landing-question"
                         placeholder="闭目静思，在此输入你当下的困惑或意念..."
                         value={question}
                         onChange={(e) => setQuestion(e.target.value)}

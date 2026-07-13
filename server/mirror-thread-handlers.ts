@@ -18,6 +18,7 @@ import {
   waitForSeedReady,
   type MirrorThreadSeedRow,
 } from "./mirror-thread-seed.js";
+import { hexagramNameFromLines } from "./hexagram-from-lines.js";
 
 type SourceReportRow = {
   id: string;
@@ -75,6 +76,25 @@ export type MirrorThreadReplyListItem = {
 const SEED_WAIT_MS = 3_000;
 const MAX_REPLY_LENGTH = 120;
 const DEFAULT_RECENT_REPLIES_LIMIT = 7;
+/** 打开面卦脉摘要：最近 N 条未过期档案（prd-00007） */
+const SURFACE_ARCHIVE_LIMIT = 5;
+const SURFACE_QUESTION_PREVIEW_MAX = 40;
+
+export type MirrorThreadSurfaceItem = {
+  archiveId: string;
+  hexagramName: string;
+  questionPreview: string | null;
+  createdAt: string;
+};
+
+export type MirrorSurfaceKind = "insight" | "summary" | "empty";
+
+function truncateQuestionPreview(question: string, maxLen = SURFACE_QUESTION_PREVIEW_MAX): string | null {
+  const s = question.replace(/\s+/g, " ").trim();
+  if (!s) return null;
+  if (s.length <= maxLen) return s;
+  return `${s.slice(0, maxLen)}…`;
+}
 
 function unauthorized(): { status: number; json: Record<string, unknown> } {
   return { status: 401, json: { error: "未登录" } };
@@ -568,6 +588,93 @@ export async function handleMirrorThreadRead(
       insightDate,
       insightReadDurationMs: Math.round(durationMs),
       generatedAt: generatedAt || null,
+      recordedAt: new Date().toISOString(),
+    }),
+  );
+
+  return { status: 204, json: {} };
+}
+
+/**
+ * GET /api/mirror-thread/surface — 打开面卦脉摘要（规则聚合，零 LLM，不扣额度）
+ */
+export async function handleMirrorThreadSurface(
+  cookieHeader: string | undefined,
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  const session = getSessionFromRequest(cookieHeader);
+  if (!session) return unauthorized();
+  if (!isQuotaBackendConfigured()) return notConfigured();
+
+  try {
+    const nowIso = new Date().toISOString();
+    const sb = createServerSupabase();
+    const { data, error } = await sb
+      .from("interpret_saved_report")
+      .select("id, question, lines, saved_at")
+      .eq("user_id", session.sub)
+      .gt("expires_at", nowIso)
+      .order("saved_at", { ascending: false })
+      .limit(SURFACE_ARCHIVE_LIMIT);
+
+    if (error) {
+      return { status: 500, json: { error: "读取卦脉摘要失败", detail: error.message } };
+    }
+
+    const rows = (data ?? []) as Array<{
+      id: string;
+      question: string | null;
+      lines: unknown;
+      saved_at: string;
+    }>;
+
+    const items: MirrorThreadSurfaceItem[] = rows.map((row) => ({
+      archiveId: row.id,
+      hexagramName: hexagramNameFromLines(row.lines),
+      questionPreview: truncateQuestionPreview(row.question ?? ""),
+      createdAt: row.saved_at,
+    }));
+
+    return {
+      status: 200,
+      json: {
+        items,
+        empty: items.length === 0,
+      },
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { status: 500, json: { error: "读取卦脉摘要失败", detail: msg } };
+  }
+}
+
+/**
+ * POST /api/mirror-thread/surface-open — 打开面会话埋点（仅日志，不写表）
+ */
+export async function handleMirrorThreadSurfaceOpen(
+  cookieHeader: string | undefined,
+  body: unknown,
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  const session = getSessionFromRequest(cookieHeader);
+  if (!session) return unauthorized();
+
+  const b = body as {
+    surface?: unknown;
+    escalatedToInterpret?: unknown;
+  };
+
+  const surface = String(b.surface ?? "").trim();
+  if (surface !== "insight" && surface !== "summary" && surface !== "empty") {
+    return { status: 400, json: { error: "surface 无效" } };
+  }
+
+  const escalatedToInterpret = Boolean(b.escalatedToInterpret);
+
+  console.info(
+    JSON.stringify({
+      event: "mirror_surface_open",
+      userId: session.sub,
+      surface,
+      escalatedToInterpret,
       recordedAt: new Date().toISOString(),
     }),
   );

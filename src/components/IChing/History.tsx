@@ -2,6 +2,11 @@ import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { LineType, HEXAGRAMS, getBinary } from "@/lib/iching";
 import type { MirrorThreadReplyListItem } from "@/lib/mirror-thread-api";
+import {
+  MIRROR_SURFACE_EMPTY_CTA,
+  MIRROR_SURFACE_EMPTY_TITLE,
+  MIRROR_SURFACE_PRINCIPLE,
+} from "@/lib/mirror-surface-copy";
 import { Hexagram } from "./Hexagram";
 import { BookOpen, ChevronRight, Clock, Trash2 } from "lucide-react";
 import { format } from "date-fns";
@@ -94,10 +99,13 @@ export const History: React.FC<HistoryProps> = ({
           <BookOpen size={48} strokeWidth={1.25} aria-hidden />
         </div>
         <p className="mb-2 font-serif text-xl text-ink/30 italic">
-          尚未留下观心的足迹
+          {MIRROR_SURFACE_EMPTY_TITLE}
+        </p>
+        <p className="mb-2 max-w-md font-serif text-sm leading-relaxed text-ink/25 italic">
+          {MIRROR_SURFACE_PRINCIPLE}
         </p>
         <p className="mb-10 max-w-md font-serif text-sm leading-relaxed text-ink/20">
-          每一次起卦，都是与自己的一次对话
+          写下此刻的困惑，留下你的第一道足迹
         </p>
         {onStartCasting && (
           <Button
@@ -105,7 +113,7 @@ export const History: React.FC<HistoryProps> = ({
             onClick={onStartCasting}
             className="h-auto rounded-full bg-ink px-10 py-5 font-serif text-sm tracking-widest text-bg hover:bg-ink/90"
           >
-            起一卦，照见此刻
+            {MIRROR_SURFACE_EMPTY_CTA}
           </Button>
         )}
       </div>
